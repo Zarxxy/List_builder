@@ -1,0 +1,44 @@
+{
+  "crawler": {
+    "enabledSources": ["listhammer", "goonhammer", "serp"],
+    "maxListsPerSource": 50,
+    "defaultDelay": 1500,
+    "navTimeout": 60000,
+    "jsRenderWait": 3000,
+    "cfChallengeWait": 10000,
+    "serpCacheTTLDays": 7,
+    "editionCutoffDate": "2025-08-01"
+  },
+  "aiAnalysis": {
+    "defaultModel": "claude-sonnet-4-6",
+    "maxTokens": 2000
+  },
+  "factionPatterns": {
+    "Death Guard": ["death.guard", "death guard"],
+    "Space Marines": ["space.marines?", "adeptus astartes"],
+    "Astra Militarum": ["astra.militarum", "imperial guard"],
+    "Aeldari": ["aeldari", "eldar(?! corsairs)"],
+    "Chaos Space Marines": ["chaos space marines", "heretic astartes"],
+    "Orks": ["orks?"],
+    "Tyranids": ["tyranids?", "hive mind"],
+    "Necrons": ["necrons?"],
+    "T'au Empire": ["t'?au empire", "tau empire"],
+    "Drukhari": ["drukhari", "dark eldar"],
+    "Adeptus Mechanicus": ["adeptus mechanicus", "admech"],
+    "Adeptus Custodes": ["adeptus custodes", "custodes"],
+    "Grey Knights": ["grey knights"],
+    "Dark Angels": ["dark angels"],
+    "Blood Angels": ["blood angels"],
+    "Space Wolves": ["space wolves"],
+    "Black Templars": ["black templars"],
+    "Deathwatch": ["deathwatch"],
+    "Thousand Sons": ["thousand sons"],
+    "World Eaters": ["world eaters"],
+    "Chaos Daemons": ["chaos daemons", "daemons of chaos"],
+    "Imperial Knights": ["imperial knights"],
+    "Chaos Knights": ["chaos knights"],
+    "Leagues of Votann": ["leagues of votann", "votann"],
+    "Adepta Sororitas": ["adepta sororitas", "sisters of battle"],
+    "Genestealer Cults": ["genestealer cults?"]
+  }
+}

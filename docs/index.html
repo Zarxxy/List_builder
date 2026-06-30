@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WH40K List Analyzer</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0d1117; --bg2: #161b22; --bg3: #1c2128;
+    --border: #30363d; --text: #e6edf3; --muted: #8b949e;
+    --green: #1e8449; --red: #c0392b; --amber: #d68910;
+    --blue: #1a5276; --purple: #7d3c98; --accent: #238636;
+  }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; min-height: 100vh; }
+  header { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; }
+  header h1 { font-size: 1.1rem; font-weight: 600; }
+  header .subtitle { font-size: 0.8rem; color: var(--muted); margin-top: 2px; }
+  .gear-btn { background: none; border: 1px solid var(--border); border-radius: 6px; color: var(--text); cursor: pointer; padding: 6px 10px; font-size: 1rem; }
+  .gear-btn:hover { background: var(--bg3); }
+  main { max-width: 860px; margin: 0 auto; padding: 24px 16px; }
+  .card { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 20px; margin-bottom: 16px; }
+  label { display: block; font-size: 0.85rem; font-weight: 500; color: var(--muted); margin-bottom: 6px; }
+  .edition-toggle { display: flex; gap: 8px; margin-bottom: 16px; }
+  .edition-btn { position: relative; }
+  .edition-btn input[type="radio"] { position: absolute; opacity: 0; width: 0; height: 0; }
+  .edition-btn label {
+    display: flex; align-items: center; gap: 6px; padding: 7px 14px;
+    border: 1px solid var(--border); border-radius: 6px; cursor: pointer;
+    font-size: 0.9rem; color: var(--text); background: var(--bg3); margin: 0;
+  }
+  .edition-btn input:checked + label { border-color: var(--accent); background: #0f2d15; color: #3fb950; }
+  select, textarea {
+    width: 100%; background: var(--bg3); border: 1px solid var(--border);
+    border-radius: 6px; color: var(--text); padding: 9px 12px; font-size: 0.9rem;
+  }
+  select:focus, textarea:focus { outline: none; border-color: #388bfd; }
+  textarea { font-family: 'Courier New', monospace; min-height: 240px; resize: vertical; }
+  .analyze-btn {
+    width: 100%; padding: 11px; background: var(--accent); border: none;
+    border-radius: 6px; color: #fff; font-size: 1rem; font-weight: 600;
+    cursor: pointer; margin-top: 14px; transition: opacity 0.15s;
+  }
+  .analyze-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .analyze-btn:not(:disabled):hover { opacity: 0.85; }
+  .error-box { background: #2d1a1a; border: 1px solid #c0392b44; border-radius: 6px; padding: 12px 16px; color: #e57373; margin-top: 12px; display: none; }
+  .spinner { display: none; text-align: center; padding: 32px; color: var(--muted); }
+  #results { display: none; }
+  .score-badge {
+    text-align: center; padding: 24px; border-radius: 8px; margin-bottom: 16px;
+    border: 1px solid var(--border);
+  }
+  .score-badge .score-num { font-size: 4rem; font-weight: 700; line-height: 1; }
+  .score-badge .score-label { font-size: 1.1rem; font-weight: 500; margin-top: 6px; }
+  .score-casual    { background: #2d0d0d; color: #e57373; border-color: #c0392b44; }
+  .score-below-meta { background: #2a1e0a; color: #f0a32e; border-color: #d6891044; }
+  .score-competitive { background: #0a1a2a; color: #58a6ff; border-color: #1a527644; }
+  .score-strong    { background: #0d2218; color: #56d364; border-color: #1e844944; }
+  .score-meta-optimal { background: #1a0a2e; color: #bc8cff; border-color: #7d3c9844; }
+  .verdict-banner { border-left: 4px solid var(--accent); padding: 12px 16px; background: var(--bg2); border-radius: 0 6px 6px 0; margin-bottom: 16px; font-size: 1rem; }
+  details { border: 1px solid var(--border); border-radius: 6px; margin-bottom: 10px; }
+  details summary { padding: 12px 16px; cursor: pointer; font-weight: 500; font-size: 0.9rem; list-style: none; display: flex; align-items: center; gap: 8px; }
+  details summary::before { content: '▶'; font-size: 0.7rem; color: var(--muted); transition: transform 0.2s; }
+  details[open] summary::before { transform: rotate(90deg); }
+  details .inner { padding: 12px 16px; border-top: 1px solid var(--border); font-size: 0.9rem; line-height: 1.6; }
+  .sw-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 10px; }
+  .sw-col { border: 1px solid var(--border); border-radius: 6px; padding: 12px; }
+  .sw-col h4 { font-size: 0.85rem; font-weight: 600; margin-bottom: 8px; }
+  .sw-col.strengths h4 { color: #56d364; }
+  .sw-col.weaknesses h4 { color: #e57373; }
+  .sw-col li { margin-left: 16px; margin-bottom: 4px; font-size: 0.85rem; }
+  .rec-card { border: 1px solid var(--border); border-radius: 6px; padding: 12px; margin-bottom: 8px; display: flex; gap: 12px; align-items: flex-start; }
+  .rec-num { background: var(--accent); color: #fff; border-radius: 50%; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 700; flex-shrink: 0; }
+  .rec-text { font-size: 0.9rem; line-height: 1.5; }
+  .mock-notice { background: #2a1e0a; border: 1px solid #d6891044; border-radius: 6px; padding: 8px 12px; color: #f0a32e; font-size: 0.8rem; margin-bottom: 8px; }
+  .results-footer { text-align: center; color: var(--muted); font-size: 0.78rem; padding: 12px; }
+  .api-key-status { font-size: 0.75rem; color: var(--muted); margin-top: 8px; }
+  /* Modal */
+  .modal-overlay { display: none; position: fixed; inset: 0; background: #000a; z-index: 100; align-items: center; justify-content: center; }
+  .modal-overlay.open { display: flex; }
+  .modal { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 24px; width: min(420px, 94vw); }
+  .modal h2 { font-size: 1rem; font-weight: 600; margin-bottom: 16px; }
+  .modal input[type="password"] { width: 100%; background: var(--bg3); border: 1px solid var(--border); border-radius: 6px; color: var(--text); padding: 9px 12px; font-size: 0.9rem; margin-bottom: 10px; }
+  .modal input:focus { outline: none; border-color: #388bfd; }
+  .modal .notice { font-size: 0.78rem; color: var(--muted); margin-bottom: 14px; }
+  .modal-btns { display: flex; gap: 8px; }
+  .btn-save { background: var(--accent); border: none; color: #fff; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 0.9rem; }
+  .btn-clear { background: none; border: 1px solid var(--border); color: var(--text); padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 0.9rem; }
+  .btn-close { background: none; border: none; color: var(--muted); cursor: pointer; float: right; font-size: 1.2rem; }
+  @media (max-width: 600px) { .sw-grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>WH40K List Analyzer</h1>
+    <div class="subtitle">AI-powered competitive analysis · Multi-source tournament data</div>
+  </div>
+  <button class="gear-btn" onclick="openSettings()" title="API Key Settings">⚙</button>
+</header>
+
+<div class="modal-overlay" id="settingsModal">
+  <div class="modal">
+    <button class="btn-close" onclick="closeSettings()">✕</button>
+    <h2>Anthropic API Key</h2>
+    <input type="password" id="apiKeyInput" placeholder="sk-ant-..." autocomplete="off">
+    <div class="notice">Your key is stored only in this browser tab's session storage and is cleared when you close the tab. It is never sent to any server other than api.anthropic.com.</div>
+    <div class="modal-btns">
+      <button class="btn-save" onclick="saveKey()">Save for session</button>
+      <button class="btn-clear" onclick="clearKey()">Clear</button>
+    </div>
+  </div>
+</div>
+
+<main>
+  <div class="card">
+    <div>
+      <label>Edition</label>
+      <div class="edition-toggle">
+        <div class="edition-btn">
+          <input type="radio" name="edition" id="ed11" value="11ed" checked>
+          <label for="ed11">11th Edition</label>
+        </div>
+        <div class="edition-btn">
+          <input type="radio" name="edition" id="ed10" value="10ed">
+          <label for="ed10">10th Edition</label>
+        </div>
+      </div>
+    </div>
+    <div style="margin-bottom:14px">
+      <label for="factionSelect">Faction</label>
+      <select id="factionSelect"></select>
+    </div>
+    <div>
+      <label for="listText">Army List</label>
+      <textarea id="listText" placeholder="Paste your army list here...
+
+Example:
+Army Faction: Death Guard
+Detachment: Plague Company
+Total Points: 2000
+
+Lord of Contagion [105pts]
+  - Warlord
+
+Plague Marines [130pts]
+  - Plague Champion
+  - 4x Plague Marine
+
+Poxwalkers [50pts]
+..."></textarea>
+    </div>
+    <button class="analyze-btn" id="analyzeBtn" onclick="analyze()" disabled>Analyze List</button>
+    <div class="api-key-status" id="apiKeyStatus"></div>
+    <div class="error-box" id="errorBox"></div>
+  </div>
+
+  <div class="spinner" id="spinner">Analyzing your list against tournament data...</div>
+
+  <div id="results">
+    <div class="score-badge" id="scoreBadge"></div>
+    <div class="verdict-banner" id="verdictBanner"></div>
+    <details open>
+      <summary>Meta Context</summary>
+      <div class="inner" id="metaContext"></div>
+    </details>
+    <details open>
+      <summary>Detachment Analysis</summary>
+      <div class="inner" id="detachmentAnalysis"></div>
+    </details>
+    <div class="sw-grid">
+      <div class="sw-col strengths">
+        <h4>✓ Strengths</h4>
+        <ul id="strengthsList"></ul>
+      </div>
+      <div class="sw-col weaknesses">
+        <h4>✗ Weaknesses</h4>
+        <ul id="weaknessesList"></ul>
+      </div>
+    </div>
+    <details>
+      <summary>Comparison to Meta</summary>
+      <div class="inner"><ol id="comparisonList" style="padding-left:16px"></ol></div>
+    </details>
+    <details open>
+      <summary>Recommendations</summary>
+      <div class="inner" id="recommendations"></div>
+    </details>
+    <div class="results-footer" id="resultsFooter"></div>
+  </div>
+</main>
+
+<script>
+// ── SUPPORTED FACTIONS ──────────────────────────────────────────────────────
+const SUPPORTED_FACTIONS = [
+  { key: 'death-guard',         label: 'Death Guard' },
+  { key: 'space-marines',       label: 'Space Marines' },
+  { key: 'astra-militarum',     label: 'Astra Militarum' },
+  { key: 'aeldari',             label: 'Aeldari' },
+  { key: 'chaos-space-marines', label: 'Chaos Space Marines' },
+  { key: 'orks',                label: 'Orks' },
+  { key: 'tyranids',            label: 'Tyranids' },
+  { key: 'necrons',             label: 'Necrons' },
+  { key: 'tau-empire',          label: "T'au Empire" },
+  { key: 'drukhari',            label: 'Drukhari' },
+  { key: 'adeptus-mechanicus',  label: 'Adeptus Mechanicus' },
+  { key: 'adeptus-custodes',    label: 'Adeptus Custodes' },
+  { key: 'grey-knights',        label: 'Grey Knights' },
+  { key: 'dark-angels',         label: 'Dark Angels' },
+  { key: 'blood-angels',        label: 'Blood Angels' },
+  { key: 'space-wolves',        label: 'Space Wolves' },
+  { key: 'black-templars',      label: 'Black Templars' },
+  { key: 'deathwatch',          label: 'Deathwatch' },
+  { key: 'thousand-sons',       label: 'Thousand Sons' },
+  { key: 'world-eaters',        label: 'World Eaters' },
+  { key: 'chaos-daemons',       label: 'Chaos Daemons' },
+  { key: 'imperial-knights',    label: 'Imperial Knights' },
+  { key: 'chaos-knights',       label: 'Chaos Knights' },
+  { key: 'leagues-of-votann',   label: 'Leagues of Votann' },
+  { key: 'adepta-sororitas',    label: 'Adepta Sororitas' },
+  { key: 'genestealer-cults',   label: 'Genestealer Cults' },
+];
+
+// ── MOCK DATA ────────────────────────────────────────────────────────────────
+const MOCK_DATA = {
+  'death-guard-11ed': {
+    meta: { faction: 'Death Guard', totalLists: 32, edition: '11ed', crawledAt: '2025-10-01T00:00:00.000Z', sources: {} },
+    detachmentBreakdown: [
+      { detachment: 'Plague Company', count: 16, percentage: '50.0' },
+      { detachment: 'Contagion of Nurgle', count: 10, percentage: '31.3' },
+      { detachment: 'Foetid Virion', count: 6, percentage: '18.8' },
+    ],
+    topUnitsByDetachment: {
+      'Plague Company': [
+        { name: 'Plague Marines', count: 14, frequency: '87.5' },
+        { name: 'Daemon Prince of Nurgle', count: 12, frequency: '75.0' },
+        { name: 'Poxwalkers', count: 10, frequency: '62.5' },
+        { name: 'Bloat-drone', count: 9, frequency: '56.3' },
+      ],
+      'Contagion of Nurgle': [
+        { name: 'Plague Marines', count: 9, frequency: '90.0' },
+        { name: 'Lord of Contagion', count: 8, frequency: '80.0' },
+      ],
+    },
+    isMockData: true,
+  },
+  'death-guard-10ed': {
+    meta: { faction: 'Death Guard', totalLists: 48, edition: '10ed', crawledAt: '2025-07-01T00:00:00.000Z', sources: {} },
+    detachmentBreakdown: [
+      { detachment: 'Plague Company', count: 28, percentage: '58.3' },
+      { detachment: 'Inexorable Advance', count: 12, percentage: '25.0' },
+      { detachment: 'Contagion of Nurgle', count: 8, percentage: '16.7' },
+    ],
+    topUnitsByDetachment: {
+      'Plague Company': [
+        { name: 'Plague Marines', count: 26, frequency: '92.9' },
+        { name: 'Daemon Prince of Nurgle', count: 22, frequency: '78.6' },
+        { name: 'Mortarion', count: 10, frequency: '35.7' },
+      ],
+    },
+    isMockData: true,
+  },
+  'space-marines-11ed': {
+    meta: { faction: 'Space Marines', totalLists: 38, edition: '11ed', crawledAt: '2025-10-01T00:00:00.000Z', sources: {} },
+    detachmentBreakdown: [
+      { detachment: 'Gladius Task Force', count: 18, percentage: '47.4' },
+      { detachment: 'Stormlance Task Force', count: 12, percentage: '31.6' },
+      { detachment: 'Ironstorm Spearhead', count: 8, percentage: '21.1' },
+    ],
+    topUnitsByDetachment: {
+      'Gladius Task Force': [
+        { name: 'Intercessors', count: 16, frequency: '88.9' },
+        { name: 'Redemptor Dreadnought', count: 11, frequency: '61.1' },
+      ],
+    },
+    isMockData: true,
+  },
+  'space-marines-10ed': {
+    meta: { faction: 'Space Marines', totalLists: 52, edition: '10ed', crawledAt: '2025-07-01T00:00:00.000Z', sources: {} },
+    detachmentBreakdown: [
+      { detachment: 'Gladius Task Force', count: 24, percentage: '46.2' },
+      { detachment: 'Firestorm Assault Force', count: 16, percentage: '30.8' },
+      { detachment: 'Stormlance Task Force', count: 12, percentage: '23.1' },
+    ],
+    topUnitsByDetachment: {
+      'Gladius Task Force': [{ name: 'Intercessors', count: 22, frequency: '91.7' }],
+    },
+    isMockData: true,
+  },
+  'chaos-space-marines-11ed': {
+    meta: { faction: 'Chaos Space Marines', totalLists: 29, edition: '11ed', crawledAt: '2025-10-01T00:00:00.000Z', sources: {} },
+    detachmentBreakdown: [
+      { detachment: 'Slaves to Darkness', count: 14, percentage: '48.3' },
+      { detachment: 'Raiders from the Rift', count: 9, percentage: '31.0' },
+    ],
+    topUnitsByDetachment: {
+      'Slaves to Darkness': [{ name: 'Chaos Space Marines', count: 13, frequency: '92.9' }],
+    },
+    isMockData: true,
+  },
+  'orks-11ed': {
+    meta: { faction: 'Orks', totalLists: 33, edition: '11ed', crawledAt: '2025-10-01T00:00:00.000Z', sources: {} },
+    detachmentBreakdown: [
+      { detachment: "Waaagh! Tribe", count: 16, percentage: '48.5' },
+      { detachment: 'Bully Boyz', count: 10, percentage: '30.3' },
+      { detachment: 'Dread Mob', count: 7, percentage: '21.2' },
+    ],
+    topUnitsByDetachment: {
+      "Waaagh! Tribe": [
+        { name: 'Boyz', count: 15, frequency: '93.8' },
+        { name: 'Warboss', count: 14, frequency: '87.5' },
+      ],
+    },
+    isMockData: true,
+  },
+  'orks-10ed': {
+    meta: { faction: 'Orks', totalLists: 41, edition: '10ed', crawledAt: '2025-07-01T00:00:00.000Z', sources: {} },
+    detachmentBreakdown: [
+      { detachment: 'Green Tide', count: 20, percentage: '48.8' },
+      { detachment: "Waaagh! Tribe", count: 12, percentage: '29.3' },
+    ],
+    topUnitsByDetachment: {
+      'Green Tide': [{ name: 'Boyz', count: 19, frequency: '95.0' }],
+    },
+    isMockData: true,
+  },
+};
+
+function getMockData(factionKey, edition) {
+  return MOCK_DATA[`${factionKey}-${edition}`] || null;
+}
+
+// ── STATE ────────────────────────────────────────────────────────────────────
+let factionsWithRealData = new Set();
+
+// ── INIT ─────────────────────────────────────────────────────────────────────
+(async function init() {
+  // Load manifest to find factions with live crawled data
+  try {
+    const m = await fetch('./data/manifest.json').then((r) => r.json());
+    (m.files || []).forEach((f) => {
+      const match = f.match(/army-lists-(.+)-(10ed|11ed)-latest\.json/);
+      if (match) factionsWithRealData.add(`${match[1]}:${match[2]}`);
+    });
+  } catch (_) { /* no manifest — all factions use mock data */ }
+
+  buildFactionSelect();
+  updateApiKeyStatus();
+
+  document.getElementById('factionSelect').addEventListener('change', checkReady);
+  document.getElementById('listText').addEventListener('input', checkReady);
+  document.querySelectorAll('input[name="edition"]').forEach((r) => {
+    r.addEventListener('change', () => { buildFactionSelect(); checkReady(); });
+  });
+})();
+
+function buildFactionSelect() {
+  const edition = document.querySelector('input[name="edition"]:checked').value;
+  const sel = document.getElementById('factionSelect');
+  const current = sel.value;
+  sel.innerHTML = '';
+  for (const f of SUPPORTED_FACTIONS) {
+    const hasLive = factionsWithRealData.has(`${f.key}:${edition}`);
+    const ctx = getMockData(f.key, edition);
+    const listCount = hasLive ? '(live data)' : (ctx ? `(${ctx.meta.totalLists} lists — meta snapshot)` : '(no data)');
+    const opt = document.createElement('option');
+    opt.value = f.key;
+    opt.textContent = `${f.label} ${listCount}`;
+    sel.appendChild(opt);
+  }
+  if (current) sel.value = current;
+}
+
+function checkReady() {
+  const hasKey = !!sessionStorage.getItem('anthropic_key');
+  const hasFaction = !!document.getElementById('factionSelect').value;
+  const hasText = document.getElementById('listText').value.trim().length >= 10;
+  const btn = document.getElementById('analyzeBtn');
+  btn.disabled = !(hasKey && hasFaction && hasText);
+  if (!hasKey) btn.textContent = 'Enter API key in settings ⚙';
+  else btn.textContent = 'Analyze List';
+}
+
+function updateApiKeyStatus() {
+  const el = document.getElementById('apiKeyStatus');
+  const hasKey = !!sessionStorage.getItem('anthropic_key');
+  el.textContent = hasKey ? '✓ API key saved for this session' : 'No API key — click ⚙ to add one';
+  el.style.color = hasKey ? '#56d364' : '#f0a32e';
+  checkReady();
+}
+
+// ── SETTINGS MODAL ───────────────────────────────────────────────────────────
+function openSettings() {
+  const k = sessionStorage.getItem('anthropic_key') || '';
+  document.getElementById('apiKeyInput').value = k ? '••••••••••' + k.slice(-4) : '';
+  document.getElementById('settingsModal').classList.add('open');
+}
+function closeSettings() { document.getElementById('settingsModal').classList.remove('open'); }
+function saveKey() {
+  const v = document.getElementById('apiKeyInput').value.trim();
+  if (v && !v.startsWith('••')) {
+    sessionStorage.setItem('anthropic_key', v);
+    updateApiKeyStatus();
+  }
+  closeSettings();
+}
+function clearKey() {
+  sessionStorage.removeItem('anthropic_key');
+  document.getElementById('apiKeyInput').value = '';
+  updateApiKeyStatus();
+  closeSettings();
+}
+
+// ── PROMPT BUILDERS ──────────────────────────────────────────────────────────
+function buildSystemPrompt(factionKey, edition) {
+  const faction = SUPPORTED_FACTIONS.find((f) => f.key === factionKey)?.label || factionKey;
+  const edLabel = edition === '11ed' ? '11th Edition' : '10th Edition';
+  return [
+    `You are an expert Warhammer 40,000 ${edLabel} competitive analyst.`,
+    `Evaluate a player's army list against the current tournament meta for their faction.`,
+    `Use your knowledge of ${edLabel} rules, points costs, detachments, and faction abilities.`,
+    '',
+    '=== ANALYSIS RULES — FOLLOW STRICTLY ===',
+    'RULE 1 — SCORE: Integer 1–10. 1–3 Casual | 4–5 Below Meta | 6–7 Competitive | 8–9 Strong | 10 Meta-Optimal',
+    'RULE 2 — SCORE LABEL: "Casual" | "Below Meta" | "Competitive" | "Strong" | "Meta-Optimal"',
+    'RULE 3 — DETACHMENT ANALYSIS: ≤60 words on how well the list exploits its detachment.',
+    'RULE 4 — META EXPLANATION: ≤80 words on current meta context. If data is marked as synthetic, note that clearly.',
+    'RULE 5 — STRENGTHS: Exactly 3 strings (not objects), each ≤20 words.',
+    'RULE 6 — WEAKNESSES: Exactly 3 strings (not objects), each ≤20 words.',
+    'RULE 7 — COMPARISON POINTS: Exactly 3 strings (not objects), each ≤25 words. Name specific units and their tournament frequency where provided.',
+    `RULE 8 — RECOMMENDATIONS: Exactly 3 strings (not objects), each ≤30 words. Actionable — reference tournament data and ${edLabel} rules.`,
+    'RULE 9 — VERDICT: Single sentence ≤25 words.',
+    'IMPORTANT: Respond with ONLY valid JSON. Start with { end with }.',
+  ].join('\n');
+}
+
+function buildUserMessage(listText, factionKey, edition, context) {
+  const faction = SUPPORTED_FACTIONS.find((f) => f.key === factionKey)?.label || factionKey;
+  const edLabel = edition === '11ed' ? '11th Edition' : '10th Edition';
+  const { meta = {}, detachmentBreakdown = [], topUnitsByDetachment = {}, isMockData, sources = {} } = context || {};
+  const sourceStr = Object.entries(sources).map(([k, v]) => `${k}: ${v}`).join(', ') || 'none';
+  const dataSource = isMockData ? 'Synthetic meta snapshot (approximate)' : `Real tournament data — sources: ${sourceStr}`;
+
+  const lines = [
+    `=== TOURNAMENT META DATA: ${faction.toUpperCase()} (${edLabel}) ===`,
+    `Source: ${dataSource}`,
+    `Total lists: ${meta.totalLists || 0} | Last crawled: ${meta.crawledAt || 'N/A'}`,
+    '',
+  ];
+
+  if (detachmentBreakdown.length > 0) {
+    lines.push('DETACHMENT BREAKDOWN:');
+    detachmentBreakdown.forEach((d) => lines.push(`  ${d.detachment} — ${d.count} lists (${d.percentage}%)`));
+    lines.push('');
+  }
+
+  const tubd = topUnitsByDetachment || {};
+  if (Object.keys(tubd).length > 0) {
+    lines.push('TOP UNITS BY DETACHMENT:');
+    for (const [det, units] of Object.entries(tubd)) {
+      if (!units || units.length === 0) continue;
+      const unitStr = units.slice(0, 5).map((u) => `${u.name} (${u.frequency}%)`).join(', ');
+      lines.push(`  ${det}: ${unitStr}`);
+    }
+    lines.push('');
+  }
+
+  lines.push('=== SUBMITTED ARMY LIST ===');
+  lines.push(listText.slice(0, 5000));
+  lines.push('');
+  lines.push('=== REQUIRED OUTPUT SCHEMA ===');
+  lines.push('{ score, score_label, detachment_analysis, meta_explanation,');
+  lines.push('  strengths[], weaknesses[], comparison_points[], recommendations[], verdict }');
+  return lines.join('\n');
+}
+
+// ── JSON EXTRACTOR ───────────────────────────────────────────────────────────
+function extractJSON(raw) {
+  const t = raw.trim();
+  try { return JSON.parse(t); } catch {}
+  const fm = t.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (fm) { try { return JSON.parse(fm[1].trim()); } catch {} }
+  const fi = t.indexOf('{'), li = t.lastIndexOf('}');
+  if (fi !== -1 && li > fi) { try { return JSON.parse(t.slice(fi, li + 1)); } catch {} }
+  return null;
+}
+
+// ── ANALYZE ──────────────────────────────────────────────────────────────────
+async function analyze() {
+  const apiKey = sessionStorage.getItem('anthropic_key');
+  if (!apiKey) { showError('Enter your Anthropic API key in settings ⚙'); return; }
+
+  const factionKey = document.getElementById('factionSelect').value;
+  const edition    = document.querySelector('input[name="edition"]:checked').value;
+  const listText   = document.getElementById('listText').value.trim();
+  if (!listText || listText.length < 10) { showError('Please paste your army list before analyzing.'); return; }
+
+  // Load tournament context
+  const dataKey = `${factionKey}:${edition}`;
+  let context = null;
+  if (factionsWithRealData.has(dataKey)) {
+    context = await fetch(`./data/army-lists-${factionKey}-${edition}-latest.json`)
+      .then((r) => r.json()).catch(() => null);
+  }
+  if (!context) context = getMockData(factionKey, edition);
+
+  const systemPrompt = buildSystemPrompt(factionKey, edition);
+  const userMessage  = buildUserMessage(listText, factionKey, edition, context);
+
+  setLoading(true);
+  hideError();
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 90000);
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      signal: controller.signal,
+      headers: {
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'content-type': 'application/json',
+        'anthropic-dangerous-direct-browser-access': 'true',
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 2000,
+        system: [{ type: 'text', text: systemPrompt }],
+        messages: [{ role: 'user', content: userMessage }],
+      }),
+    });
+    clearTimeout(timer);
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      if (res.status === 401) return showError('Invalid API key — check your key in ⚙ settings.');
+      if (res.status === 429) return showError('Rate limited by Anthropic. Please wait a moment.');
+      return showError(err.error?.message || `API error ${res.status}`);
+    }
+
+    const data = await res.json();
+    const raw = data.content?.[0]?.text || '';
+    const result = extractJSON(raw);
+    if (!result) return showError('Could not parse the analysis response. Please try again.');
+
+    renderResults({ ...result, factionKey, edition, isMockData: !factionsWithRealData.has(dataKey), context });
+  } catch (err) {
+    clearTimeout(timer);
+    if (err.name === 'AbortError') showError('Analysis timed out (90s) — please try again.');
+    else showError('Network error — check your connection.');
+  } finally {
+    setLoading(false);
+  }
+}
+
+// ── RENDER ───────────────────────────────────────────────────────────────────
+function scoreBand(n) {
+  if (n <= 3) return 'casual';
+  if (n <= 5) return 'below-meta';
+  if (n <= 7) return 'competitive';
+  if (n <= 9) return 'strong';
+  return 'meta-optimal';
+}
+
+function renderResults(r) {
+  const { score, score_label, detachment_analysis, meta_explanation,
+          strengths = [], weaknesses = [], comparison_points = [],
+          recommendations = [], verdict, factionKey, edition, isMockData, context } = r;
+
+  const band = scoreBand(Number(score));
+  const badge = document.getElementById('scoreBadge');
+  badge.className = `score-badge score-${band}`;
+  badge.innerHTML = `<div class="score-num">${score}</div><div class="score-label">${score_label || ''}</div>`;
+
+  document.getElementById('verdictBanner').textContent = verdict || '';
+
+  const edLabel = edition === '11ed' ? '11th Edition' : '10th Edition';
+  const meta = context?.meta || {};
+  const sources = context?.sources || {};
+  const sourceStr = Object.entries(sources).map(([k, v]) => `${k}: ${v}`).join(', ');
+  let metaHtml = '';
+  if (isMockData) metaHtml += `<div class="mock-notice">⚠ Using synthetic meta snapshot — run the crawler for real data.</div>`;
+  metaHtml += `<p>${meta_explanation || ''}</p>`;
+  if (sourceStr) metaHtml += `<p style="margin-top:8px;color:var(--muted);font-size:0.8rem">Sources: ${sourceStr}</p>`;
+  document.getElementById('metaContext').innerHTML = metaHtml;
+
+  document.getElementById('detachmentAnalysis').textContent = detachment_analysis || '';
+
+  document.getElementById('strengthsList').innerHTML = strengths.map((s) => `<li>${s}</li>`).join('');
+  document.getElementById('weaknessesList').innerHTML = weaknesses.map((w) => `<li>${w}</li>`).join('');
+
+  document.getElementById('comparisonList').innerHTML = comparison_points.map((p) => `<li style="margin-bottom:6px">${p}</li>`).join('');
+
+  const recEl = document.getElementById('recommendations');
+  recEl.innerHTML = recommendations.map((rec, i) =>
+    `<div class="rec-card"><div class="rec-num">${i + 1}</div><div class="rec-text">${rec}</div></div>`
+  ).join('');
+
+  const faction = SUPPORTED_FACTIONS.find((f) => f.key === factionKey)?.label || factionKey;
+  document.getElementById('resultsFooter').textContent =
+    `Analyzed against ${meta.totalLists || 0} lists (${edLabel}) · ${isMockData ? 'meta snapshot' : 'live data'}`;
+
+  document.getElementById('results').style.display = 'block';
+  document.getElementById('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function setLoading(on) {
+  document.getElementById('spinner').style.display = on ? 'block' : 'none';
+  document.getElementById('analyzeBtn').disabled = on;
+  if (on) document.getElementById('results').style.display = 'none';
+}
+
+function showError(msg) {
+  const el = document.getElementById('errorBox');
+  el.textContent = msg;
+  el.style.display = 'block';
+  setLoading(false);
+}
+
+function hideError() {
+  document.getElementById('errorBox').style.display = 'none';
+}
+
+// Close modal on overlay click
+document.getElementById('settingsModal').addEventListener('click', function(e) {
+  if (e.target === this) closeSettings();
+});
+</script>
+</body>
+</html>
