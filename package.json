@@ -1,0 +1,29 @@
+{
+  "name": "wh40k-list-analyzer",
+  "version": "1.0.0",
+  "description": "Warhammer 40K army list competitive analyzer — multi-source tournament data, AI-powered critique, 10th & 11th Edition support",
+  "engines": { "node": ">=20.0.0" },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.88.0",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "playwright": "^1.45.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.0.0",
+    "eslint": "^9.0.0"
+  },
+  "scripts": {
+    "start":           "node server.js",
+    "start:dev":       "node --watch server.js",
+    "crawl:dg":        "node crawler/index.js --edition 11ed --faction \"Death Guard\"",
+    "crawl:sm":        "node crawler/index.js --edition 11ed --faction \"Space Marines\"",
+    "crawl:aeldari":   "node crawler/index.js --edition 11ed --faction \"Aeldari\"",
+    "crawl:orks":      "node crawler/index.js --edition 11ed --faction \"Orks\"",
+    "crawl:dg:10ed":   "node crawler/index.js --edition 10ed --faction \"Death Guard\"",
+    "build:pages":     "node build-pages.js",
+    "postinstall":     "playwright install chromium --with-deps",
+    "lint":            "eslint *.js crawler/ tests/",
+    "test":            "node --test tests/test-list-analyzer.js tests/test-crawler-merger.js"
+  }
+}
