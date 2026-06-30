@@ -81,7 +81,7 @@ async function fetchLists(faction, edition, opts = {}) {
         serpResults = cached.results;
         console.log(`[serp] Using cached SERP results (${age.toFixed(1)} days old)`);
       }
-    } catch (_) {}
+    } catch {}
   }
 
   if (!serpResults) {

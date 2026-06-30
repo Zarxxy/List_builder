@@ -33,7 +33,6 @@ async function main() {
   log.info(`Crawler starting — faction: "${faction}", edition: ${edition}, sources: ${sources.join(', ')}`);
 
   const PLAYWRIGHT_SOURCES = ['listhammer', 'bcp', 'tabletop-to'];
-  const HTTP_SOURCES = ['goonhammer', 'serp'];
 
   const usesPlaywright = sources.some((s) => PLAYWRIGHT_SOURCES.includes(s));
   const usesToS = sources.some((s) => ['bcp', 'tabletop-to'].includes(s));

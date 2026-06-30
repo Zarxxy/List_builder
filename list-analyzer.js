@@ -106,7 +106,7 @@ function loadTournamentContext(faction, edition) {
     try {
       const raw = JSON.parse(fs.readFileSync(file, 'utf-8'));
       return buildContextFromOutput(raw);
-    } catch (_) {}
+    } catch {}
   }
   const mock = getMockData(faction, ed);
   if (mock) return mock;

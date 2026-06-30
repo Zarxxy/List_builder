@@ -101,7 +101,7 @@ async function fetchLists(faction, edition, opts = {}) {
               }
             }
           }
-        } catch (_) {}
+        } catch {}
       }
       if (entries.length > 0) return entries;
 

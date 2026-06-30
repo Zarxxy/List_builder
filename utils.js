@@ -51,7 +51,7 @@ log.warn  = (...a) => log('warn',  ...a);
 log.error = (...a) => log('error', ...a);
 log.debug = (...a) => log('debug', ...a);
 
-const UNIT_REGEX = /^[•·\-\s]*(.+?)\s*[\[(]\s*(\d+)\s*pts?\s*[\])]/gim;
+const UNIT_REGEX = /^[•·\-\s]*(.+?)\s*[([]\s*(\d+)\s*pts?\s*[\])]/gim;
 const ALT_UNIT_REGEX = /^[•·\-\s]*(.+?)\s{2,}\.{0,}?\s*(\d{2,4})\s*pts?\s*$/gim;
 
 function parseUnitsFromText(text, maxNameLength) {
