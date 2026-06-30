@@ -15,7 +15,6 @@ on:
 permissions:
   pages: write
   id-token: write
-  administration: write   # required for configure-pages to auto-enable Pages
 
 jobs:
   crawl-and-deploy:
