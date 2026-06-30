@@ -48,7 +48,6 @@ function normalize(entries, defaultEdition) {
 
 function deduplicate(entries) {
   const byPrimaryKey = new Map();
-  const byHashKey = new Map();
 
   for (const entry of entries) {
     const np = normalizePlayer(entry.playerName);
@@ -73,18 +72,28 @@ function deduplicate(entries) {
         byPrimaryKey.set(`${np}\x00${ne}`, entry);
       }
     } else {
-      // Content hash fallback for anonymous entries
-      const units = parseUnitsFromText(entry.armyListText);
-      if (units.length >= 3) {
-        const hash = contentHash(entry.armyListText);
-        if (!byHashKey.has(hash)) {
-          byHashKey.set(hash, entry);
-        }
-      }
+      // Anonymous entries get a placeholder key to pass through to the hash pass
+      byPrimaryKey.set(`__anon__${byPrimaryKey.size}`, entry);
     }
   }
 
-  return [...byPrimaryKey.values(), ...byHashKey.values()];
+  // Secondary pass: content hash dedup catches same list under different player/event combos
+  const byHashKey = new Map();
+  const result = [];
+  for (const entry of byPrimaryKey.values()) {
+    const units = parseUnitsFromText(entry.armyListText);
+    if (units.length >= 3) {
+      const hash = contentHash(entry.armyListText);
+      if (!byHashKey.has(hash)) {
+        byHashKey.set(hash, true);
+        result.push(entry);
+      }
+    } else {
+      result.push(entry);
+    }
+  }
+
+  return result;
 }
 
 function buildOutput(entries, faction, edition) {
