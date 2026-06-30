@@ -6,11 +6,43 @@ on:
   workflow_dispatch:
     inputs:
       faction:
-        description: 'Faction to crawl (display name)'
+        description: 'Faction to crawl'
+        type: choice
         default: 'Death Guard'
+        options:
+          - 'Death Guard'
+          - 'Space Marines'
+          - 'Astra Militarum'
+          - 'Aeldari'
+          - 'Chaos Space Marines'
+          - 'Orks'
+          - 'Tyranids'
+          - 'Necrons'
+          - "T'au Empire"
+          - 'Drukhari'
+          - 'Adeptus Mechanicus'
+          - 'Adeptus Custodes'
+          - 'Grey Knights'
+          - 'Dark Angels'
+          - 'Blood Angels'
+          - 'Space Wolves'
+          - 'Black Templars'
+          - 'Deathwatch'
+          - 'Thousand Sons'
+          - 'World Eaters'
+          - 'Chaos Daemons'
+          - 'Imperial Knights'
+          - 'Chaos Knights'
+          - 'Leagues of Votann'
+          - 'Adepta Sororitas'
+          - 'Genestealer Cults'
       edition:
-        description: 'Edition (11ed or 10ed)'
+        description: 'Edition'
+        type: choice
         default: '11ed'
+        options:
+          - '11ed'
+          - '10ed'
 
 permissions:
   pages: write
@@ -34,8 +66,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Crawl Death Guard (11th Edition)
-        run: npm run crawl:dg
+      - name: Crawl faction
+        run: node crawler/index.js --faction "${{ github.event.inputs.faction || 'Death Guard' }}" --edition "${{ github.event.inputs.edition || '11ed' }}"
         env:
           SERPAPI_KEY: ${{ secrets.SERPAPI_KEY }}
 
