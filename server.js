@@ -33,12 +33,14 @@ app.use('/shared', express.static(path.join(__dirname, 'shared')));
 
 // Rate limiter: 10 req/min per IP
 const rateLimitMap = new Map();
+// unref() so this background sweep never keeps the process alive on its own
+// (matters when the app is imported by tests rather than run as a server).
 setInterval(() => {
   const now = Date.now();
   for (const [ip, entry] of rateLimitMap) {
     if (entry.resetAt < now) rateLimitMap.delete(ip);
   }
-}, 5 * 60 * 1000);
+}, 5 * 60 * 1000).unref();
 
 function rateLimit(req, res, next) {
   const ip = req.ip;
@@ -94,11 +96,15 @@ app.all('/api/*', (_req, res) => res.status(404).json({ error: 'API endpoint not
 
 app.get('*', (_req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 
-app.listen(PORT, () => {
-  factionsCache = buildFactionsCache();
-  console.log(`[server] WH40K List Analyzer at http://localhost:${PORT}`);
-  console.log(`[server] API key: ${process.env.ANTHROPIC_API_KEY ? 'configured' : 'MISSING'}`);
-  console.log('[server] Note: restart server after running a crawl to refresh list counts.');
-});
+// Only start listening when run directly (`node server.js`), so tests can
+// import `app` without binding a port.
+if (require.main === module) {
+  app.listen(PORT, () => {
+    factionsCache = buildFactionsCache();
+    console.log(`[server] WH40K List Analyzer at http://localhost:${PORT}`);
+    console.log(`[server] API key: ${process.env.ANTHROPIC_API_KEY ? 'configured' : 'MISSING'}`);
+    console.log('[server] Note: restart server after running a crawl to refresh list counts.');
+  });
+}
 
 module.exports = app;
