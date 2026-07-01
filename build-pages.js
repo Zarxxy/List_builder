@@ -41,10 +41,12 @@ function buildSharedBundle() {
 // Pure: produce the docs/index.html contents (no disk write) so it can be tested.
 function renderIndexHtml() {
   const template = fs.readFileSync(path.join(docsDir, 'index.template.html'), 'utf-8');
+  // Function replacers so `$` sequences in the inlined code (e.g. template
+  // literals) are never interpreted as String.replace special patterns.
   return template
-    .replace('<!--SHARED_MODULES-->', buildSharedBundle())
-    .replace('__MODEL_ID__', MODEL_ID)
-    .replace('__MAX_TOKENS__', String(MAX_TOKENS));
+    .replace('<!--SHARED_MODULES-->', () => buildSharedBundle())
+    .replace('__MODEL_ID__', () => MODEL_ID)
+    .replace('__MAX_TOKENS__', () => String(MAX_TOKENS));
 }
 
 function generateIndexHtml() {
