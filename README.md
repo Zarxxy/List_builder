@@ -78,7 +78,7 @@ node build-pages.js       # copy output/ → docs/data/ + write manifest.json
 git add docs/data/        # if you want to commit static data (optional)
 ```
 
-A GitHub Actions workflow (`crawl-deploy.yml`) runs every Sunday at 06:00 UTC and automatically crawls Death Guard + deploys to Pages.
+The GitHub Actions workflow (`crawl-deploy.yml`) is **manual-only** — it does not run on a schedule. Trigger it from the **Actions → "Crawl & Deploy to GitHub Pages" → Run workflow** button, choosing a faction and edition; it crawls the selected faction and deploys to Pages. This keeps SerpAPI usage under your control (one crawl ≈ one SerpAPI search, cached 7 days).
 
 ## Environment Variables
 
