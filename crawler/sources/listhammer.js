@@ -1,20 +1,9 @@
 'use strict';
 
-const { extractDetachment, parseUnitsFromText } = require('../../utils');
+const { extractDetachment } = require('../../utils');
+const { detectEdition, sleep } = require('../lib/html');
 
 const BASE_URL = 'https://listhammer.info';
-const EDITION_CUTOFF = new Date('2025-08-01');
-
-function detectEdition(dateStr) {
-  if (!dateStr) return null;
-  const d = new Date(dateStr);
-  if (Number.isNaN(d.getTime())) return null;
-  return d >= EDITION_CUTOFF ? '11ed' : '10ed';
-}
-
-function sleep(ms) {
-  return new Promise((r) => setTimeout(r, ms));
-}
 
 async function fetchLists(faction, edition, opts = {}) {
   const { maxLists = 50, timeout = 60000, browser } = opts;

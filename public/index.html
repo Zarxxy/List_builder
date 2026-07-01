@@ -135,9 +135,11 @@ etc."></textarea>
   <div id="results"></div>
 </main>
 
+<script src="/shared/format.js"></script>
 <script>
 'use strict';
 
+// esc() and scoreBand() come from /shared/format.js (loaded above).
 let allFactions = [];
 const factionSelect = document.getElementById('factionSelect');
 const listText = document.getElementById('listText');
@@ -148,18 +150,6 @@ const errorBox = document.getElementById('errorBox');
 
 function getEdition() {
   return document.querySelector('input[name="edition"]:checked').value;
-}
-
-function scoreBand(n) {
-  if (n <= 3) return 'casual';
-  if (n <= 5) return 'below-meta';
-  if (n <= 7) return 'competitive';
-  if (n <= 9) return 'strong';
-  return 'meta-optimal';
-}
-
-function esc(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
 function showError(msg) {

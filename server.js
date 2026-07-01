@@ -4,7 +4,7 @@ require('dotenv').config();
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
-const { analyzeList, SUPPORTED_FACTIONS } = require('./list-analyzer');
+const { analyzeList, SUPPORTED_FACTIONS, DEFAULT_MODEL } = require('./list-analyzer');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -27,6 +27,9 @@ function buildFactionsCache() {
 
 app.use(express.json({ limit: '64kb' }));
 app.use(express.static(path.join(__dirname, 'public')));
+// Expose shared browser helpers (esc, scoreBand) so public/index.html can reuse
+// the single source of truth instead of re-defining them.
+app.use('/shared', express.static(path.join(__dirname, 'shared')));
 
 // Rate limiter: 10 req/min per IP
 const rateLimitMap = new Map();
@@ -75,7 +78,7 @@ app.post('/api/analyze', rateLimit, async (req, res) => {
       faction,
       edition,
       apiKey,
-      model: process.env.CLAUDE_MODEL || 'claude-sonnet-4-6',
+      model: process.env.CLAUDE_MODEL || DEFAULT_MODEL,
     });
     res.json(result);
   } catch (err) {

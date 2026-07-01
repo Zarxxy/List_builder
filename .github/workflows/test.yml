@@ -28,3 +28,6 @@ jobs:
 
       - name: Run tests
         run: npm test
+
+      - name: Verify docs/index.html is in sync with template + shared modules
+        run: npm run verify:pages
