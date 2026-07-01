@@ -97,18 +97,18 @@
     <h1>WH40K List Analyzer</h1>
     <div class="subtitle">AI-powered competitive analysis · Multi-source tournament data</div>
   </div>
-  <button class="gear-btn" onclick="openSettings()" title="API Key Settings">⚙</button>
+  <button class="gear-btn" id="gearBtn" title="API Key Settings">⚙</button>
 </header>
 
 <div class="modal-overlay" id="settingsModal">
   <div class="modal">
-    <button class="btn-close" onclick="closeSettings()">✕</button>
+    <button class="btn-close" id="closeSettingsBtn">✕</button>
     <h2>Anthropic API Key</h2>
     <input type="password" id="apiKeyInput" placeholder="sk-ant-..." autocomplete="off">
     <div class="notice">Your key is stored only in this browser tab's session storage and is cleared when you close the tab. It is never sent to any server other than api.anthropic.com.</div>
     <div class="modal-btns">
-      <button class="btn-save" onclick="saveKey()">Save for session</button>
-      <button class="btn-clear" onclick="clearKey()">Clear</button>
+      <button class="btn-save" id="saveKeyBtn">Save for session</button>
+      <button class="btn-clear" id="clearKeyBtn">Clear</button>
     </div>
   </div>
 </div>
@@ -151,7 +151,7 @@ Plague Marines [130pts]
 Poxwalkers [50pts]
 ..."></textarea>
     </div>
-    <button class="analyze-btn" id="analyzeBtn" onclick="analyze()" disabled>Analyze List</button>
+    <button class="analyze-btn" id="analyzeBtn" disabled>Analyze List</button>
     <div class="api-key-status" id="apiKeyStatus"></div>
     <div class="error-box" id="errorBox"></div>
   </div>
@@ -192,6 +192,17 @@ Poxwalkers [50pts]
 </main>
 
 <script>
+'use strict';
+
+// ── HTML ESCAPING ────────────────────────────────────────────────────────────
+// Model output is attacker-influenceable (it echoes the user-pasted list), so
+// every interpolation into innerHTML must be escaped to prevent XSS.
+function esc(s) {
+  return String(s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
 // ── SUPPORTED FACTIONS ──────────────────────────────────────────────────────
 const SUPPORTED_FACTIONS = [
   { key: 'death-guard',         label: 'Death Guard' },
@@ -544,6 +555,9 @@ async function analyze() {
     const raw = data.content?.[0]?.text || '';
     const result = extractJSON(raw);
     if (!result) return showError('Could not parse the analysis response. Please try again.');
+    if (!Number.isFinite(Number(result.score))) {
+      return showError('The analysis response was malformed — please try again.');
+    }
 
     renderResults({ ...result, factionKey, edition, isMockData: !factionsWithRealData.has(dataKey), context });
   } catch (err) {
@@ -572,7 +586,7 @@ function renderResults(r) {
   const band = scoreBand(Number(score));
   const badge = document.getElementById('scoreBadge');
   badge.className = `score-badge score-${band}`;
-  badge.innerHTML = `<div class="score-num">${score}</div><div class="score-label">${score_label || ''}</div>`;
+  badge.innerHTML = `<div class="score-num">${esc(score)}</div><div class="score-label">${esc(score_label || '')}</div>`;
 
   document.getElementById('verdictBanner').textContent = verdict || '';
 
@@ -582,20 +596,20 @@ function renderResults(r) {
   const sourceStr = Object.entries(sources).map(([k, v]) => `${k}: ${v}`).join(', ');
   let metaHtml = '';
   if (isMockData) metaHtml += `<div class="mock-notice">⚠ Using synthetic meta snapshot — run the crawler for real data.</div>`;
-  metaHtml += `<p>${meta_explanation || ''}</p>`;
-  if (sourceStr) metaHtml += `<p style="margin-top:8px;color:var(--muted);font-size:0.8rem">Sources: ${sourceStr}</p>`;
+  metaHtml += `<p>${esc(meta_explanation || '')}</p>`;
+  if (sourceStr) metaHtml += `<p style="margin-top:8px;color:var(--muted);font-size:0.8rem">Sources: ${esc(sourceStr)}</p>`;
   document.getElementById('metaContext').innerHTML = metaHtml;
 
   document.getElementById('detachmentAnalysis').textContent = detachment_analysis || '';
 
-  document.getElementById('strengthsList').innerHTML = strengths.map((s) => `<li>${s}</li>`).join('');
-  document.getElementById('weaknessesList').innerHTML = weaknesses.map((w) => `<li>${w}</li>`).join('');
+  document.getElementById('strengthsList').innerHTML = strengths.map((s) => `<li>${esc(s)}</li>`).join('');
+  document.getElementById('weaknessesList').innerHTML = weaknesses.map((w) => `<li>${esc(w)}</li>`).join('');
 
-  document.getElementById('comparisonList').innerHTML = comparison_points.map((p) => `<li style="margin-bottom:6px">${p}</li>`).join('');
+  document.getElementById('comparisonList').innerHTML = comparison_points.map((p) => `<li style="margin-bottom:6px">${esc(p)}</li>`).join('');
 
   const recEl = document.getElementById('recommendations');
   recEl.innerHTML = recommendations.map((rec, i) =>
-    `<div class="rec-card"><div class="rec-num">${i + 1}</div><div class="rec-text">${rec}</div></div>`
+    `<div class="rec-card"><div class="rec-num">${i + 1}</div><div class="rec-text">${esc(rec)}</div></div>`
   ).join('');
 
   const faction = SUPPORTED_FACTIONS.find((f) => f.key === factionKey)?.label || factionKey;
@@ -622,6 +636,13 @@ function showError(msg) {
 function hideError() {
   document.getElementById('errorBox').style.display = 'none';
 }
+
+// ── EVENT WIRING (no inline handlers) ────────────────────────────────────────
+document.getElementById('gearBtn').addEventListener('click', openSettings);
+document.getElementById('closeSettingsBtn').addEventListener('click', closeSettings);
+document.getElementById('saveKeyBtn').addEventListener('click', saveKey);
+document.getElementById('clearKeyBtn').addEventListener('click', clearKey);
+document.getElementById('analyzeBtn').addEventListener('click', analyze);
 
 // Close modal on overlay click
 document.getElementById('settingsModal').addEventListener('click', function(e) {
