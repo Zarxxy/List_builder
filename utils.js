@@ -20,7 +20,9 @@ function extractDetachment(text) {
   if (!text) return null;
   const m = text.match(/Detachment:\s*(.+?)(?:\n|$)/i) ||
             text.match(/Detachment\s*[-–:]\s*(.+?)(?:\n|$)/i);
-  return m ? m[1].trim() : null;
+  // The GW 40K app wraps header lines in "+ ... +", e.g.
+  // "+ DETACHMENT: Plague Company +" — strip the trailing/leading decoration.
+  return m ? m[1].replace(/\s*\+\s*$/, '').replace(/^\+\s*/, '').trim() : null;
 }
 
 function flattenLists(raw) {
@@ -51,8 +53,12 @@ log.warn  = (...a) => log('warn',  ...a);
 log.error = (...a) => log('error', ...a);
 log.debug = (...a) => log('debug', ...a);
 
-const UNIT_REGEX = /^[•·\-\s]*(.+?)\s*[([]\s*(\d+)\s*pts?\s*[\])]/gim;
-const ALT_UNIT_REGEX = /^[•·\-\s]*(.+?)\s{2,}\.{0,}?\s*(\d{2,4})\s*pts?\s*$/gim;
+// Points can be written as "pt"/"pts" or spelled out "point"/"Points". The
+// official Games Workshop 40K app — the dominant export format for modern
+// tournament lists — uses the spelled-out form, e.g. "Typhus (100 Points)".
+const POINTS_UNIT = '(?:pts?|points?)';
+const UNIT_REGEX = new RegExp(`^[•·\\-\\s]*(.+?)\\s*[([]\\s*(\\d+)\\s*${POINTS_UNIT}\\s*[\\])]`, 'gim');
+const ALT_UNIT_REGEX = new RegExp(`^[•·\\-\\s]*(.+?)\\s{2,}\\.{0,}?\\s*(\\d{2,4})\\s*${POINTS_UNIT}\\s*$`, 'gim');
 
 function parseUnitsFromText(text, maxNameLength) {
   if (!text) return [];
