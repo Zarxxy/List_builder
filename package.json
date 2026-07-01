@@ -24,7 +24,7 @@
     "build:pages":     "node build-pages.js",
     "postinstall":     "playwright install chromium --with-deps",
     "lint":            "eslint *.js shared/ crawler/ tests/",
-    "test":            "node --test tests/test-list-analyzer.js tests/test-crawler-merger.js tests/test-shared.js tests/test-build-pages.js tests/test-server-smoke.js",
+    "test":            "node --test tests/test-list-analyzer.js tests/test-crawler-merger.js tests/test-shared.js tests/test-utils.js tests/test-build-pages.js tests/test-server-smoke.js",
     "test:e2e":        "node --test tests/e2e/docs-smoke.mjs",
     "verify:pages":    "node build-pages.js && git diff --exit-code docs/index.html"
   }
