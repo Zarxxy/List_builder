@@ -71,6 +71,41 @@ test('generated docs page loads, populates factions, and renders without uncaugh
   await page.close();
 });
 
+test('pre-flight list summary renders live as the user types (and escapes input)', async () => {
+  const page = await browser.newPage();
+  const pageErrors = [];
+  page.on('pageerror', (e) => pageErrors.push(e.message));
+
+  await page.goto(docsUrl, { waitUntil: 'load' });
+  await page.waitForFunction(() => document.getElementById('factionSelect').options.length > 0);
+
+  // GW-app-style paste: title line with declared total, detachment carrying an
+  // XSS payload, two units. The summary must appear without any analyze call.
+  await page.fill('#listText', [
+    'my list (2000 points)',
+    'Detachment: <img src=x onerror="window.__xssSummary=1">',
+    'Plague Marines (100 Points)',
+    'Typhus (80 Points)',
+  ].join('\n'));
+
+  await page.waitForSelector('#listSummary', { state: 'visible' });
+  const text = await page.$eval('#listSummary', (el) => el.textContent);
+  assert.ok(text.includes('2 units parsed'), `summary text: ${text}`);
+  assert.ok(text.includes('180pts / 2000pts declared'), `summary text: ${text}`);
+  assert.ok(text.includes('Parsed 180pts of the declared 2000pts'), `summary text: ${text}`);
+
+  // The detachment chip renders user input — payload must stay inert.
+  assert.equal(await page.locator('#listSummary img').count(), 0, 'summary injected a live <img> (XSS!)');
+  assert.equal(await page.evaluate(() => window.__xssSummary), undefined, 'onerror executed in summary (XSS!)');
+
+  // Clearing the textarea hides the panel again.
+  await page.fill('#listText', '');
+  await page.waitForSelector('#listSummary', { state: 'hidden' });
+
+  assert.deepEqual(pageErrors, [], `uncaught page errors: ${pageErrors.join('; ')}`);
+  await page.close();
+});
+
 test('model output is escaped end-to-end (XSS payload stays inert)', async () => {
   const page = await browser.newPage();
   const pageErrors = [];

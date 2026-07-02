@@ -31,9 +31,10 @@ function inlineModule(file) {
 }
 
 // Dependency order matters: factions before prompt (prompt references
-// SUPPORTED_FACTIONS), and getMockData/format before the UI code that uses them.
+// SUPPORTED_FACTIONS), format before list-summary (renderListSummaryHtml uses
+// esc), and getMockData/format before the UI code that uses them.
 function buildSharedBundle() {
-  return ['factions.js', 'mock-data.js', 'format.js', 'prompt.js']
+  return ['factions.js', 'mock-data.js', 'format.js', 'list-summary.js', 'prompt.js']
     .map((f) => `// ── shared/${f} ──\n${inlineModule(f)}`)
     .join('\n\n');
 }

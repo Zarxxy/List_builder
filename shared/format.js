@@ -23,5 +23,23 @@ function esc(s) {
     .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+// HTML for the pre-flight list summary panel (both front ends render it under
+// the list textarea; the summary object comes from shared/list-summary.js).
+// Everything user-derived goes through esc().
+function renderListSummaryHtml(summary) {
+  if (!summary) return '';
+  const chips = [];
+  if (summary.detachment) chips.push(`<span class="chip chip-ok">Detachment: ${esc(summary.detachment)}</span>`);
+  chips.push(`<span class="chip">${summary.unitCount} unit${summary.unitCount === 1 ? '' : 's'} parsed</span>`);
+  if (summary.totalPoints > 0) {
+    const declared = summary.declaredPoints ? ` / ${summary.declaredPoints}pts declared` : '';
+    chips.push(`<span class="chip">${summary.totalPoints}pts${declared}</span>`);
+  }
+  const warnings = (summary.warnings || [])
+    .map((w) => `<div class="summary-warning">⚠ ${esc(w)}</div>`)
+    .join('');
+  return `<div class="summary-chips">${chips.join('')}</div>${warnings}`;
+}
+
 // Export for Node; skipped when loaded as a plain browser script.
-if (typeof module !== 'undefined' && module.exports) { module.exports = { scoreBand, esc }; }
+if (typeof module !== 'undefined' && module.exports) { module.exports = { scoreBand, esc, renderListSummaryHtml }; }
