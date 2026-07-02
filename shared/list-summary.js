@@ -18,32 +18,24 @@ function parseUnitsFromText(text, maxNameLength) {
   const units = [];
   const seen = new Set();
 
-  UNIT_REGEX.lastIndex = 0;
-  let m;
-  while ((m = UNIT_REGEX.exec(text)) !== null) {
-    const rawName = m[1].trim().replace(/^[x×]\d+\s+/i, '').replace(/\s*[-–:]\s*$/, '');
-    const pts = parseInt(m[2], 10);
-    if (rawName && pts > 0 && rawName.length < cap) {
-      const key = rawName + '|' + pts;
-      if (!seen.has(key)) {
-        seen.add(key);
-        units.push({ name: rawName, points: pts });
+  function collect(regex, cleanName) {
+    regex.lastIndex = 0;
+    let m;
+    while ((m = regex.exec(text)) !== null) {
+      const rawName = cleanName(m[1]);
+      const pts = parseInt(m[2], 10);
+      if (rawName && pts > 0 && rawName.length < cap) {
+        const key = rawName + '|' + pts;
+        if (!seen.has(key)) {
+          seen.add(key);
+          units.push({ name: rawName, points: pts });
+        }
       }
     }
   }
 
-  ALT_UNIT_REGEX.lastIndex = 0;
-  while ((m = ALT_UNIT_REGEX.exec(text)) !== null) {
-    const rawName = m[1].trim().replace(/\.+$/, '').trim();
-    const pts = parseInt(m[2], 10);
-    if (rawName && pts > 0 && rawName.length < cap) {
-      const key = rawName + '|' + pts;
-      if (!seen.has(key)) {
-        seen.add(key);
-        units.push({ name: rawName, points: pts });
-      }
-    }
-  }
+  collect(UNIT_REGEX,     (s) => s.trim().replace(/^[x×]\d+\s+/i, '').replace(/\s*[-–:]\s*$/, ''));
+  collect(ALT_UNIT_REGEX, (s) => s.trim().replace(/\.+$/, '').trim());
 
   return units;
 }
@@ -110,4 +102,4 @@ function summarizeList(text) {
 }
 
 // Export for Node; the whole line is stripped when inlined into the browser.
-if (typeof module !== 'undefined' && module.exports) { module.exports = { POINTS_UNIT, UNIT_REGEX, ALT_UNIT_REGEX, parseUnitsFromText, extractDetachment, extractDeclaredPoints, summarizeList }; }
+if (typeof module !== 'undefined' && module.exports) { module.exports = { parseUnitsFromText, extractDetachment, extractDeclaredPoints, summarizeList }; }

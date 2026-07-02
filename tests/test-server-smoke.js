@@ -25,14 +25,29 @@ test('GET /shared/format.js serves the shared browser helpers', async () => {
   const body = await res.text();
   assert.ok(body.includes('function esc('), 'esc() missing from /shared/format.js');
   assert.ok(body.includes('function scoreBand('), 'scoreBand() missing from /shared/format.js');
+  assert.ok(body.includes('function renderAnalysisHtml('), 'renderAnalysisHtml() missing from /shared/format.js');
 });
 
-test('GET / serves the public page wired to /shared/format.js', async () => {
+test('GET /shared/styles.css serves the shared stylesheet', async () => {
+  const res = await fetch(`${base}/shared/styles.css`);
+  assert.equal(res.status, 200);
+  assert.ok((await res.text()).includes('.score-badge'), 'shared styles missing .score-badge');
+});
+
+test('GET / serves the public page wired to the shared assets and app script', async () => {
   const res = await fetch(`${base}/`);
   assert.equal(res.status, 200);
   const body = await res.text();
   assert.ok(body.includes('id="factionSelect"'), 'faction select missing');
+  assert.ok(body.includes('/shared/styles.css'), 'shared stylesheet link missing');
   assert.ok(body.includes('/shared/format.js'), 'shared script tag missing');
+  assert.ok(body.includes('/app.js'), 'app script tag missing');
+});
+
+test('GET /app.js serves the page UI script', async () => {
+  const res = await fetch(`${base}/app.js`);
+  assert.equal(res.status, 200);
+  assert.ok((await res.text()).includes('renderAnalysisHtml('), 'app.js does not use the shared renderer');
 });
 
 test('GET /api/factions returns all 26 factions with list counts', async () => {

@@ -1,5 +1,20 @@
 # Code Redundancy & Optimization Audit — WH40K List Analyzer
 
+> **Status update (2026-07-02):** the findings below have been **applied** in the follow-up commit
+> on this branch, with two deliberate exceptions:
+>
+> - **D8** (SERP defaults triple-specified) — left as-is. JSON has no comments, so trimming
+>   `config.json.crawler.serp` to overrides-only would delete the only in-repo documentation of the
+>   available knobs (the README points users at that block). The `{ ...SERP_DEFAULTS, ...config }`
+>   merge makes the duplication harmless.
+> - **S3's merger note** (O(n²) dedup pass) — explicitly no change, as recommended in the finding
+>   itself.
+>
+> Everything else — D1–D7, T1–T7, G1, DC1–DC6, S1–S2, and the rest of S3 — is implemented.
+> Verification: 83/83 unit tests, lint clean (now covering the browser app scripts), 3/3 Playwright
+> e2e tests on the generated docs page, plus a browser smoke of the public page (faction load, live
+> summary, stubbed analyze render, XSS payload inert).
+
 **Scope:** full repository sweep — source, shared modules, crawler, both front ends, test suites,
 config, and CI. **Deliverable:** report only; no application code was changed.
 
@@ -410,15 +425,16 @@ correctly a devDependency using the preinstalled browser). No orphaned test file
 
 ## Priority Summary
 
-| # | Finding | Type | Effort | Value |
-|---|---------|------|--------|-------|
-| D1+S2 | Consolidate front-end CSS + render/UI code via the existing shared/inline mechanism; make browser JS lintable | Duplication / Refactoring | Medium | **High** |
-| DC1–DC6 | Delete dead functions, shim, stale exports & ESLint globals | Dead Code | Low | Medium |
-| T1–T5 | Deduplicate test coverage; centralize fixtures | Test Redundancy | Low | Medium |
-| G1 | Add faction-list sync guard tests | Test Gap | Low | Medium |
-| D2–D4 | Centralize `editionLabel`, faction slug, sources formatting | Duplication | Low | Medium |
-| S1 | Remove unreachable crawler error branch | Refactoring | Low | Low |
-| D5–D8, T6–T7, S3 | Config loader, path helper, parse-loop extraction, fixture renames, micro-simplifications | Various | Low | Low |
+| # | Finding | Type | Effort | Value | Status |
+|---|---------|------|--------|-------|--------|
+| D1+S2 | Consolidate front-end CSS + render/UI code via the existing shared/inline mechanism; make browser JS lintable | Duplication / Refactoring | Medium | **High** | ✅ Applied |
+| DC1–DC6 | Delete dead functions, shim, stale exports & ESLint globals | Dead Code | Low | Medium | ✅ Applied |
+| T1–T5 | Deduplicate test coverage; centralize fixtures | Test Redundancy | Low | Medium | ✅ Applied |
+| G1 | Add faction-list sync guard tests | Test Gap | Low | Medium | ✅ Applied |
+| D2–D4 | Centralize `editionLabel`, faction slug, sources formatting | Duplication | Low | Medium | ✅ Applied |
+| S1 | Remove unreachable crawler error branch | Refactoring | Low | Low | ✅ Applied |
+| D5–D7, T6–T7, S3 | Config loader, path helper, parse-loop extraction, fixture renames, micro-simplifications | Various | Low | Low | ✅ Applied (S3 merger note intentionally unchanged) |
+| D8 | SERP defaults triple-specified | Duplication (advisory) | Low | Low | ⏸ Deferred — config block doubles as the only documented override surface (JSON has no comments) |
 
 *Report only — no source files were modified. Line numbers reference the repository state at commit
 time of this audit; re-verify before applying fixes.*

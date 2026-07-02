@@ -3,11 +3,11 @@
 require('dotenv').config();
 
 const fs = require('fs');
-const path = require('path');
-const { getArg, log } = require('../utils');
+const { getArg, log, outputFileFor, OUTPUT_DIR } = require('../utils');
+const { factionToKey } = require('../shared/factions');
 const { normalize, deduplicate, buildOutput } = require('./merger');
+const { config } = require('../config');
 
-const config = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'config.json'), 'utf-8'));
 const args = process.argv.slice(2);
 
 const faction  = getArg(args, '--faction')  || 'Death Guard';
@@ -16,8 +16,6 @@ const sourcesArg = getArg(args, '--sources');
 const sources = sourcesArg
   ? sourcesArg.split(',').map((s) => s.trim())
   : config.crawler.enabledSources;
-
-const OUTPUT_DIR = path.join(__dirname, '..', 'output');
 
 async function main() {
   fs.mkdirSync(OUTPUT_DIR, { recursive: true });
@@ -39,16 +37,17 @@ async function main() {
     serp: () => require('./sources/serp').fetchLists(faction, edition, opts),
   };
 
+  // Each task .catch()es into a value, so Promise.all never rejects and one
+  // failed source cannot take down the whole crawl.
   const tasks = sources
     .filter((s) => sourceModules[s])
     .map((s) => sourceModules[s]().then((r) => ({ source: s, entries: r, ok: true }))
       .catch((err) => { log.error(`[${s}] failed: ${err.message}`); return { source: s, entries: [], ok: false }; }));
 
-  const settled = await Promise.allSettled(tasks);
+  const results = await Promise.all(tasks);
 
   let allEntries = [];
-  for (const result of settled) {
-    const val = result.status === 'fulfilled' ? result.value : { source: '?', entries: [], ok: false };
+  for (const val of results) {
     log.info(`Source "${val.source}": ${val.entries.length} entries${val.ok ? '' : ' (FAILED)'}`);
     allEntries = allEntries.concat(val.entries);
   }
@@ -59,8 +58,7 @@ async function main() {
 
   log.info(`Total after dedup: ${output.totalLists} lists from ${Object.keys(output.sources).join(', ')}`);
 
-  const factionKey = faction.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
-  const outFile = path.join(OUTPUT_DIR, `army-lists-${factionKey}-${edition}-latest.json`);
+  const outFile = outputFileFor(factionToKey(faction), edition);
 
   if (output.totalLists === 0 && fs.existsSync(outFile)) {
     log.error(`Crawl produced 0 lists — refusing to overwrite existing ${outFile}`);

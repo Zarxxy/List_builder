@@ -5,14 +5,11 @@
 // build-pages.js. Previously duplicated (and drifted) between list-analyzer.js
 // and docs/index.html.
 const { SUPPORTED_FACTIONS } = require('./factions');
+const { editionLabel, formatSources } = require('./format');
 
 function factionLabel(factionKey) {
   const found = SUPPORTED_FACTIONS.find((f) => f.key === factionKey);
   return found ? found.label : factionKey;
-}
-
-function editionLabel(edition) {
-  return edition === '11ed' ? '11th Edition' : '10th Edition';
 }
 
 // Returns the system prompt as a plain string. Node wraps it with cache_control
@@ -48,7 +45,7 @@ function buildUserMessage(listText, factionKey, edition, context) {
   const edLabel = editionLabel(edition);
   const { meta = {}, detachmentBreakdown = [], topUnitsByDetachment = {}, isMockData, sources = {} } = context || {};
 
-  const sourceStr = Object.entries(sources).map(([k, v]) => `${k}: ${v}`).join(', ') || 'none';
+  const sourceStr = formatSources(sources) || 'none';
   const dataSource = isMockData
     ? 'Synthetic meta snapshot (approximate)'
     : `Real tournament data — sources: ${sourceStr}`;
@@ -105,4 +102,4 @@ function extractJSON(raw) {
 }
 
 // Export for Node; the whole line is stripped when inlined into the browser.
-if (typeof module !== 'undefined' && module.exports) { module.exports = { buildSystemText, buildUserMessage, extractJSON, factionLabel, editionLabel }; }
+if (typeof module !== 'undefined' && module.exports) { module.exports = { buildSystemText, buildUserMessage, extractJSON, factionLabel }; }

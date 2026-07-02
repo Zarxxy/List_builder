@@ -5,80 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>WH40K List Analyzer</title>
 <style>
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  :root {
-    --bg: #0d1117; --bg2: #161b22; --bg3: #1c2128;
-    --border: #30363d; --text: #e6edf3; --muted: #8b949e;
-    --green: #1e8449; --red: #c0392b; --amber: #d68910;
-    --blue: #1a5276; --purple: #7d3c98; --accent: #238636;
-  }
-  body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; min-height: 100vh; }
-  header { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; }
-  header h1 { font-size: 1.1rem; font-weight: 600; }
-  header .subtitle { font-size: 0.8rem; color: var(--muted); margin-top: 2px; }
+/*SHARED_STYLES*/
+  /* Page-specific chrome; everything above is inlined from shared/styles.css. */
   .gear-btn { background: none; border: 1px solid var(--border); border-radius: 6px; color: var(--text); cursor: pointer; padding: 6px 10px; font-size: 1rem; }
   .gear-btn:hover { background: var(--bg3); }
-  main { max-width: 860px; margin: 0 auto; padding: 24px 16px; }
-  .card { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 20px; margin-bottom: 16px; }
-  label { display: block; font-size: 0.85rem; font-weight: 500; color: var(--muted); margin-bottom: 6px; }
-  .edition-toggle { display: flex; gap: 8px; margin-bottom: 16px; }
-  .edition-btn { position: relative; }
-  .edition-btn input[type="radio"] { position: absolute; opacity: 0; width: 0; height: 0; }
-  .edition-btn label {
-    display: flex; align-items: center; gap: 6px; padding: 7px 14px;
-    border: 1px solid var(--border); border-radius: 6px; cursor: pointer;
-    font-size: 0.9rem; color: var(--text); background: var(--bg3); margin: 0;
-  }
-  .edition-btn input:checked + label { border-color: var(--accent); background: #0f2d15; color: #3fb950; }
-  select, textarea {
-    width: 100%; background: var(--bg3); border: 1px solid var(--border);
-    border-radius: 6px; color: var(--text); padding: 9px 12px; font-size: 0.9rem;
-  }
-  select:focus, textarea:focus { outline: none; border-color: #388bfd; }
-  textarea { font-family: 'Courier New', monospace; min-height: 240px; resize: vertical; }
-  .analyze-btn {
-    width: 100%; padding: 11px; background: var(--accent); border: none;
-    border-radius: 6px; color: #fff; font-size: 1rem; font-weight: 600;
-    cursor: pointer; margin-top: 14px; transition: opacity 0.15s;
-  }
-  .analyze-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-  .analyze-btn:not(:disabled):hover { opacity: 0.85; }
-  .error-box { background: #2d1a1a; border: 1px solid #c0392b44; border-radius: 6px; padding: 12px 16px; color: #e57373; margin-top: 12px; display: none; }
-  .spinner { display: none; text-align: center; padding: 32px; color: var(--muted); }
-  #results { display: none; }
-  .score-badge {
-    text-align: center; padding: 24px; border-radius: 8px; margin-bottom: 16px;
-    border: 1px solid var(--border);
-  }
-  .score-badge .score-num { font-size: 4rem; font-weight: 700; line-height: 1; }
-  .score-badge .score-label { font-size: 1.1rem; font-weight: 500; margin-top: 6px; }
-  .score-casual    { background: #2d0d0d; color: #e57373; border-color: #c0392b44; }
-  .score-below-meta { background: #2a1e0a; color: #f0a32e; border-color: #d6891044; }
-  .score-competitive { background: #0a1a2a; color: #58a6ff; border-color: #1a527644; }
-  .score-strong    { background: #0d2218; color: #56d364; border-color: #1e844944; }
-  .score-meta-optimal { background: #1a0a2e; color: #bc8cff; border-color: #7d3c9844; }
-  .verdict-banner { border-left: 4px solid var(--accent); padding: 12px 16px; background: var(--bg2); border-radius: 0 6px 6px 0; margin-bottom: 16px; font-size: 1rem; }
-  details { border: 1px solid var(--border); border-radius: 6px; margin-bottom: 10px; }
-  details summary { padding: 12px 16px; cursor: pointer; font-weight: 500; font-size: 0.9rem; list-style: none; display: flex; align-items: center; gap: 8px; }
-  details summary::before { content: '▶'; font-size: 0.7rem; color: var(--muted); transition: transform 0.2s; }
-  details[open] summary::before { transform: rotate(90deg); }
-  details .inner { padding: 12px 16px; border-top: 1px solid var(--border); font-size: 0.9rem; line-height: 1.6; }
-  .sw-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 10px; }
-  .sw-col { border: 1px solid var(--border); border-radius: 6px; padding: 12px; }
-  .sw-col h4 { font-size: 0.85rem; font-weight: 600; margin-bottom: 8px; }
-  .sw-col.strengths h4 { color: #56d364; }
-  .sw-col.weaknesses h4 { color: #e57373; }
-  .sw-col li { margin-left: 16px; margin-bottom: 4px; font-size: 0.85rem; }
-  .rec-card { border: 1px solid var(--border); border-radius: 6px; padding: 12px; margin-bottom: 8px; display: flex; gap: 12px; align-items: flex-start; }
-  .rec-num { background: var(--accent); color: #fff; border-radius: 50%; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 700; flex-shrink: 0; }
-  .rec-text { font-size: 0.9rem; line-height: 1.5; }
-  .mock-notice { background: #2a1e0a; border: 1px solid #d6891044; border-radius: 6px; padding: 8px 12px; color: #f0a32e; font-size: 0.8rem; margin-bottom: 8px; }
-  .results-footer { text-align: center; color: var(--muted); font-size: 0.78rem; padding: 12px; }
-  .list-summary { margin-top: 10px; display: none; }
-  .summary-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-  .chip { background: var(--bg3); border: 1px solid var(--border); border-radius: 999px; padding: 3px 10px; font-size: 0.78rem; color: var(--muted); }
-  .chip-ok { color: #3fb950; border-color: #23863666; }
-  .summary-warning { color: #f0a32e; font-size: 0.78rem; margin-top: 6px; }
   .api-key-status { font-size: 0.75rem; color: var(--muted); margin-top: 8px; }
   /* Modal */
   .modal-overlay { display: none; position: fixed; inset: 0; background: #000a; z-index: 100; align-items: center; justify-content: center; }
@@ -92,15 +22,15 @@
   .btn-save { background: var(--accent); border: none; color: #fff; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 0.9rem; }
   .btn-clear { background: none; border: 1px solid var(--border); color: var(--text); padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 0.9rem; }
   .btn-close { background: none; border: none; color: var(--muted); cursor: pointer; float: right; font-size: 1.2rem; }
-  @media (max-width: 600px) { .sw-grid { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body>
 
 <!--
-  NOTE: docs/index.html is GENERATED from this template by build-pages.js.
-  Do not edit docs/index.html directly — edit this template or the shared/
-  modules and run `npm run build:pages`.
+  NOTE: docs/index.html is GENERATED from this template by build-pages.js
+  (shared/styles.css + shared/*.js modules + docs/index.app.js are inlined).
+  Do not edit docs/index.html directly — edit this template, the shared/
+  modules, or docs/index.app.js and run `npm run build:pages`.
 -->
 
 <header>
@@ -170,37 +100,7 @@ Poxwalkers [50pts]
 
   <div class="spinner" id="spinner">Analyzing your list against tournament data...</div>
 
-  <div id="results">
-    <div class="score-badge" id="scoreBadge"></div>
-    <div class="verdict-banner" id="verdictBanner"></div>
-    <details open>
-      <summary>Meta Context</summary>
-      <div class="inner" id="metaContext"></div>
-    </details>
-    <details open>
-      <summary>Detachment Analysis</summary>
-      <div class="inner" id="detachmentAnalysis"></div>
-    </details>
-    <div class="sw-grid">
-      <div class="sw-col strengths">
-        <h4>✓ Strengths</h4>
-        <ul id="strengthsList"></ul>
-      </div>
-      <div class="sw-col weaknesses">
-        <h4>✗ Weaknesses</h4>
-        <ul id="weaknessesList"></ul>
-      </div>
-    </div>
-    <details>
-      <summary>Comparison to Meta</summary>
-      <div class="inner"><ol id="comparisonList" style="padding-left:16px"></ol></div>
-    </details>
-    <details open>
-      <summary>Recommendations</summary>
-      <div class="inner" id="recommendations"></div>
-    </details>
-    <div class="results-footer" id="resultsFooter"></div>
-  </div>
+  <div id="results"></div>
 </main>
 
 <script>
@@ -209,246 +109,16 @@ Poxwalkers [50pts]
 // ─────────────────────────────────────────────────────────────────────────────
 // SHARED MODULES (generated — inlined from shared/*.js by build-pages.js)
 // Provides: SUPPORTED_FACTIONS, MOCK_DATA, getMockData, scoreBand, esc,
-//           renderListSummaryHtml, summarizeList, parseUnitsFromText,
+//           editionLabel, formatSources, renderListSummaryHtml,
+//           renderAnalysisHtml, summarizeList, parseUnitsFromText,
 //           extractDetachment, buildSystemText, buildUserMessage, extractJSON
 // ─────────────────────────────────────────────────────────────────────────────
 <!--SHARED_MODULES-->
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PAGE-SPECIFIC UI (static GitHub Pages build — calls api.anthropic.com directly)
+// PAGE-SPECIFIC UI (generated — inlined from docs/index.app.js by build-pages.js)
 // ─────────────────────────────────────────────────────────────────────────────
-
-// ── STATE ────────────────────────────────────────────────────────────────────
-let factionsWithRealData = new Set();
-
-// ── INIT ─────────────────────────────────────────────────────────────────────
-(async function init() {
-  // Load manifest to find factions with live crawled data
-  try {
-    const m = await fetch('./data/manifest.json').then((r) => r.json());
-    (m.files || []).forEach((f) => {
-      const match = f.match(/army-lists-(.+)-(10ed|11ed)-latest\.json/);
-      if (match) factionsWithRealData.add(`${match[1]}:${match[2]}`);
-    });
-  } catch (_) { /* no manifest — all factions use mock data */ }
-
-  buildFactionSelect();
-  updateApiKeyStatus();
-
-  document.getElementById('factionSelect').addEventListener('change', checkReady);
-  document.getElementById('listText').addEventListener('input', () => { checkReady(); refreshSummary(); });
-  document.querySelectorAll('input[name="edition"]').forEach((r) => {
-    r.addEventListener('change', () => { buildFactionSelect(); checkReady(); });
-  });
-})();
-
-function buildFactionSelect() {
-  const edition = document.querySelector('input[name="edition"]:checked').value;
-  const sel = document.getElementById('factionSelect');
-  const current = sel.value;
-  sel.innerHTML = '';
-  for (const f of SUPPORTED_FACTIONS) {
-    const hasLive = factionsWithRealData.has(`${f.key}:${edition}`);
-    const ctx = getMockData(f.key, edition);
-    const listCount = hasLive ? '(live data)' : (ctx ? `(${ctx.meta.totalLists} lists — meta snapshot)` : '(no data)');
-    const opt = document.createElement('option');
-    opt.value = f.key;
-    opt.textContent = `${f.label} ${listCount}`;
-    sel.appendChild(opt);
-  }
-  if (current) sel.value = current;
-}
-
-function checkReady() {
-  const hasKey = !!sessionStorage.getItem('anthropic_key');
-  const hasFaction = !!document.getElementById('factionSelect').value;
-  const hasText = document.getElementById('listText').value.trim().length >= 10;
-  const btn = document.getElementById('analyzeBtn');
-  btn.disabled = !(hasKey && hasFaction && hasText);
-  if (!hasKey) btn.textContent = 'Enter API key in settings ⚙';
-  else btn.textContent = 'Analyze List';
-}
-
-// Live pre-flight summary: what the parser sees, before any API tokens are spent.
-function refreshSummary() {
-  const el = document.getElementById('listSummary');
-  const summary = summarizeList(document.getElementById('listText').value);
-  el.innerHTML = renderListSummaryHtml(summary);
-  el.style.display = summary ? 'block' : 'none';
-}
-
-function updateApiKeyStatus() {
-  const el = document.getElementById('apiKeyStatus');
-  const hasKey = !!sessionStorage.getItem('anthropic_key');
-  el.textContent = hasKey ? '✓ API key saved for this session' : 'No API key — click ⚙ to add one';
-  el.style.color = hasKey ? '#56d364' : '#f0a32e';
-  checkReady();
-}
-
-// ── SETTINGS MODAL ───────────────────────────────────────────────────────────
-function openSettings() {
-  const k = sessionStorage.getItem('anthropic_key') || '';
-  document.getElementById('apiKeyInput').value = k ? '••••••••••' + k.slice(-4) : '';
-  document.getElementById('settingsModal').classList.add('open');
-}
-function closeSettings() { document.getElementById('settingsModal').classList.remove('open'); }
-function saveKey() {
-  const v = document.getElementById('apiKeyInput').value.trim();
-  if (v && !v.startsWith('••')) {
-    sessionStorage.setItem('anthropic_key', v);
-    updateApiKeyStatus();
-  }
-  closeSettings();
-}
-function clearKey() {
-  sessionStorage.removeItem('anthropic_key');
-  document.getElementById('apiKeyInput').value = '';
-  updateApiKeyStatus();
-  closeSettings();
-}
-
-// ── ANALYZE ──────────────────────────────────────────────────────────────────
-async function analyze() {
-  const apiKey = sessionStorage.getItem('anthropic_key');
-  if (!apiKey) { showError('Enter your Anthropic API key in settings ⚙'); return; }
-
-  const factionKey = document.getElementById('factionSelect').value;
-  const edition    = document.querySelector('input[name="edition"]:checked').value;
-  const listText   = document.getElementById('listText').value.trim();
-  if (!listText || listText.length < 10) { showError('Please paste your army list before analyzing.'); return; }
-
-  // Load tournament context
-  const dataKey = `${factionKey}:${edition}`;
-  let context = null;
-  if (factionsWithRealData.has(dataKey)) {
-    context = await fetch(`./data/army-lists-${factionKey}-${edition}-latest.json`)
-      .then((r) => r.json()).catch(() => null);
-  }
-  if (!context) context = getMockData(factionKey, edition);
-
-  const systemPrompt = buildSystemText(factionKey, edition);
-  const userMessage  = buildUserMessage(listText, factionKey, edition, context);
-
-  setLoading(true);
-  hideError();
-
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 90000);
-
-  try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      signal: controller.signal,
-      headers: {
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-        'content-type': 'application/json',
-        'anthropic-dangerous-direct-browser-access': 'true',
-      },
-      body: JSON.stringify({
-        model: '__MODEL_ID__',
-        max_tokens: __MAX_TOKENS__,
-        system: [{ type: 'text', text: systemPrompt }],
-        messages: [{ role: 'user', content: userMessage }],
-      }),
-    });
-    clearTimeout(timer);
-
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      if (res.status === 401) return showError('Invalid API key — check your key in ⚙ settings.');
-      if (res.status === 429) return showError('Rate limited by Anthropic. Please wait a moment.');
-      return showError(err.error?.message || `API error ${res.status}`);
-    }
-
-    const data = await res.json();
-    const raw = data.content?.[0]?.text || '';
-    const result = extractJSON(raw);
-    if (!result) return showError('Could not parse the analysis response. Please try again.');
-    if (!Number.isFinite(Number(result.score))) {
-      return showError('The analysis response was malformed — please try again.');
-    }
-
-    renderResults({ ...result, factionKey, edition, isMockData: !factionsWithRealData.has(dataKey), context });
-  } catch (err) {
-    clearTimeout(timer);
-    if (err.name === 'AbortError') showError('Analysis timed out (90s) — please try again.');
-    else showError('Network error — check your connection.');
-  } finally {
-    setLoading(false);
-  }
-}
-
-// ── RENDER ───────────────────────────────────────────────────────────────────
-function renderResults(r) {
-  const { score, score_label, detachment_analysis, meta_explanation,
-          strengths = [], weaknesses = [], comparison_points = [],
-          recommendations = [], verdict, factionKey, edition, isMockData, context } = r;
-
-  const band = scoreBand(Number(score));
-  const badge = document.getElementById('scoreBadge');
-  badge.className = `score-badge score-${band}`;
-  badge.innerHTML = `<div class="score-num">${esc(score)}</div><div class="score-label">${esc(score_label || '')}</div>`;
-
-  document.getElementById('verdictBanner').textContent = verdict || '';
-
-  const edLabel = edition === '11ed' ? '11th Edition' : '10th Edition';
-  const meta = context?.meta || {};
-  const sources = context?.sources || {};
-  const sourceStr = Object.entries(sources).map(([k, v]) => `${k}: ${v}`).join(', ');
-  let metaHtml = '';
-  if (isMockData) metaHtml += `<div class="mock-notice">⚠ Using synthetic meta snapshot — run the crawler for real data.</div>`;
-  metaHtml += `<p>${esc(meta_explanation || '')}</p>`;
-  if (sourceStr) metaHtml += `<p style="margin-top:8px;color:var(--muted);font-size:0.8rem">Sources: ${esc(sourceStr)}</p>`;
-  document.getElementById('metaContext').innerHTML = metaHtml;
-
-  document.getElementById('detachmentAnalysis').textContent = detachment_analysis || '';
-
-  document.getElementById('strengthsList').innerHTML = strengths.map((s) => `<li>${esc(s)}</li>`).join('');
-  document.getElementById('weaknessesList').innerHTML = weaknesses.map((w) => `<li>${esc(w)}</li>`).join('');
-
-  document.getElementById('comparisonList').innerHTML = comparison_points.map((p) => `<li style="margin-bottom:6px">${esc(p)}</li>`).join('');
-
-  const recEl = document.getElementById('recommendations');
-  recEl.innerHTML = recommendations.map((rec, i) =>
-    `<div class="rec-card"><div class="rec-num">${i + 1}</div><div class="rec-text">${esc(rec)}</div></div>`
-  ).join('');
-
-  document.getElementById('resultsFooter').textContent =
-    `Analyzed against ${meta.totalLists || 0} lists (${edLabel}) · ${isMockData ? 'meta snapshot' : 'live data'}`;
-
-  document.getElementById('results').style.display = 'block';
-  document.getElementById('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
-}
-
-function setLoading(on) {
-  document.getElementById('spinner').style.display = on ? 'block' : 'none';
-  document.getElementById('analyzeBtn').disabled = on;
-  if (on) document.getElementById('results').style.display = 'none';
-}
-
-function showError(msg) {
-  const el = document.getElementById('errorBox');
-  el.textContent = msg;
-  el.style.display = 'block';
-  setLoading(false);
-}
-
-function hideError() {
-  document.getElementById('errorBox').style.display = 'none';
-}
-
-// ── EVENT WIRING (no inline handlers) ────────────────────────────────────────
-document.getElementById('gearBtn').addEventListener('click', openSettings);
-document.getElementById('closeSettingsBtn').addEventListener('click', closeSettings);
-document.getElementById('saveKeyBtn').addEventListener('click', saveKey);
-document.getElementById('clearKeyBtn').addEventListener('click', clearKey);
-document.getElementById('analyzeBtn').addEventListener('click', analyze);
-
-// Close modal on overlay click
-document.getElementById('settingsModal').addEventListener('click', function(e) {
-  if (e.target === this) closeSettings();
-});
+<!--PAGE_SCRIPT-->
 </script>
 </body>
 </html>

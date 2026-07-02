@@ -1,0 +1,80 @@
+/* Styles shared by both front ends. The server serves this to
+   public/index.html via the /shared static route; build-pages.js inlines it
+   into the generated docs page. Page-specific chrome (server badge, settings
+   modal) stays in each page's own <style> block. */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #0d1117; --bg2: #161b22; --bg3: #1c2128;
+  --border: #30363d; --text: #e6edf3; --muted: #8b949e;
+  --green: #1e8449; --red: #c0392b; --amber: #d68910;
+  --blue: #1a5276; --purple: #7d3c98; --accent: #238636;
+}
+body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; min-height: 100vh; }
+header { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; }
+header h1 { font-size: 1.1rem; font-weight: 600; }
+header .subtitle { font-size: 0.8rem; color: var(--muted); margin-top: 2px; }
+main { max-width: 860px; margin: 0 auto; padding: 24px 16px; }
+.card { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 20px; margin-bottom: 16px; }
+label { display: block; font-size: 0.85rem; font-weight: 500; color: var(--muted); margin-bottom: 6px; }
+.edition-toggle { display: flex; gap: 8px; margin-bottom: 16px; }
+.edition-btn { position: relative; }
+.edition-btn input[type="radio"] { position: absolute; opacity: 0; width: 0; height: 0; }
+.edition-btn label {
+  display: flex; align-items: center; gap: 6px; padding: 7px 14px;
+  border: 1px solid var(--border); border-radius: 6px; cursor: pointer;
+  font-size: 0.9rem; color: var(--text); background: var(--bg3); margin: 0;
+}
+.edition-btn input:checked + label { border-color: var(--accent); background: #0f2d15; color: #3fb950; }
+select, textarea {
+  width: 100%; background: var(--bg3); border: 1px solid var(--border);
+  border-radius: 6px; color: var(--text); padding: 9px 12px; font-size: 0.9rem;
+}
+select:focus, textarea:focus { outline: none; border-color: #388bfd; }
+textarea { font-family: 'Courier New', monospace; min-height: 240px; resize: vertical; }
+.analyze-btn {
+  width: 100%; padding: 11px; background: var(--accent); border: none;
+  border-radius: 6px; color: #fff; font-size: 1rem; font-weight: 600;
+  cursor: pointer; margin-top: 14px; transition: opacity 0.15s;
+}
+.analyze-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.analyze-btn:not(:disabled):hover { opacity: 0.85; }
+.error-box { background: #2d1a1a; border: 1px solid #c0392b44; border-radius: 6px; padding: 12px 16px; color: #e57373; margin-top: 12px; display: none; }
+.spinner { display: none; text-align: center; padding: 32px; color: var(--muted); }
+#results { display: none; }
+.score-badge {
+  text-align: center; padding: 24px; border-radius: 8px; margin-bottom: 16px;
+  border: 1px solid var(--border);
+}
+.score-badge .score-num { font-size: 4rem; font-weight: 700; line-height: 1; }
+.score-badge .score-label { font-size: 1.1rem; font-weight: 500; margin-top: 6px; }
+.score-casual    { background: #2d0d0d; color: #e57373; border-color: #c0392b44; }
+.score-below-meta { background: #2a1e0a; color: #f0a32e; border-color: #d6891044; }
+.score-competitive { background: #0a1a2a; color: #58a6ff; border-color: #1a527644; }
+.score-strong    { background: #0d2218; color: #56d364; border-color: #1e844944; }
+.score-meta-optimal { background: #1a0a2e; color: #bc8cff; border-color: #7d3c9844; }
+.verdict-banner { border-left: 4px solid var(--accent); padding: 12px 16px; background: var(--bg2); border-radius: 0 6px 6px 0; margin-bottom: 16px; font-size: 1rem; }
+details { border: 1px solid var(--border); border-radius: 6px; margin-bottom: 10px; }
+details summary { padding: 12px 16px; cursor: pointer; font-weight: 500; font-size: 0.9rem; list-style: none; display: flex; align-items: center; gap: 8px; }
+details summary::before { content: '▶'; font-size: 0.7rem; color: var(--muted); transition: transform 0.2s; }
+details[open] summary::before { transform: rotate(90deg); }
+details .inner { padding: 12px 16px; border-top: 1px solid var(--border); font-size: 0.9rem; line-height: 1.6; }
+.data-line { margin-bottom: 6px; font-size: 0.8rem; color: var(--muted); }
+.comparison-list { margin-left: 18px; }
+.comparison-list li { margin-bottom: 6px; }
+.sw-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 10px; }
+.sw-col { border: 1px solid var(--border); border-radius: 6px; padding: 12px; }
+.sw-col h4 { font-size: 0.85rem; font-weight: 600; margin-bottom: 8px; }
+.sw-col.strengths h4 { color: #56d364; }
+.sw-col.weaknesses h4 { color: #e57373; }
+.sw-col li { margin-left: 16px; margin-bottom: 4px; font-size: 0.85rem; }
+.rec-card { border: 1px solid var(--border); border-radius: 6px; padding: 12px; margin-bottom: 8px; display: flex; gap: 12px; align-items: flex-start; }
+.rec-num { background: var(--accent); color: #fff; border-radius: 50%; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 700; flex-shrink: 0; }
+.rec-text { font-size: 0.9rem; line-height: 1.5; }
+.mock-notice { background: #2a1e0a; border: 1px solid #d6891044; border-radius: 6px; padding: 8px 12px; color: #f0a32e; font-size: 0.8rem; margin-bottom: 8px; }
+.results-footer { text-align: center; color: var(--muted); font-size: 0.78rem; padding: 12px; }
+.list-summary { margin-top: 10px; display: none; }
+.summary-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { background: var(--bg3); border: 1px solid var(--border); border-radius: 999px; padding: 3px 10px; font-size: 0.78rem; color: var(--muted); }
+.chip-ok { color: #3fb950; border-color: #23863666; }
+.summary-warning { color: #f0a32e; font-size: 0.78rem; margin-top: 6px; }
+@media (max-width: 600px) { .sw-grid { grid-template-columns: 1fr; } }

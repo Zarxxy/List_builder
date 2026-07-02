@@ -1,15 +1,11 @@
 'use strict';
 
 const fs = require('fs');
-const path = require('path');
-const { parseUnitsFromText } = require('./utils');
-const { getMockData } = require('./mock-tournament-data');
+const { parseUnitsFromText, outputFileFor } = require('./utils');
+const { getMockData } = require('./shared/mock-data');
 const { SUPPORTED_FACTIONS } = require('./shared/factions');
 const { buildSystemText, buildUserMessage, extractJSON } = require('./shared/prompt');
-
-const config = JSON.parse(fs.readFileSync(path.join(__dirname, 'config.json'), 'utf-8'));
-const DEFAULT_MODEL = (config.aiAnalysis && config.aiAnalysis.defaultModel) || 'claude-sonnet-4-6';
-const MAX_TOKENS = (config.aiAnalysis && config.aiAnalysis.maxTokens) || 2000;
+const { DEFAULT_MODEL, MAX_TOKENS } = require('./config');
 
 function normalizeListText(raw) {
   return raw
@@ -63,7 +59,7 @@ function buildContextFromOutput(raw) {
 
 function loadTournamentContext(faction, edition) {
   const ed = edition || '11ed';
-  const file = path.join(__dirname, 'output', `army-lists-${faction}-${ed}-latest.json`);
+  const file = outputFileFor(faction, ed);
   if (fs.existsSync(file)) {
     try {
       const raw = JSON.parse(fs.readFileSync(file, 'utf-8'));
@@ -135,8 +131,6 @@ module.exports = {
   loadTournamentContext,
   buildContextFromOutput,
   buildSystemBlocks,
-  buildUserMessage,
-  extractJSON,
   normalizeListText,
   SUPPORTED_FACTIONS,
   DEFAULT_MODEL,

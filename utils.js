@@ -1,33 +1,18 @@
 'use strict';
 
+const path = require('path');
+
+// Crawl artifacts live here; one file per faction+edition, overwritten by each
+// crawl. The same names are matched by regex in build-pages.js and the docs
+// page (browser code — keep the pattern in sync with outputFileFor below).
+const OUTPUT_DIR = path.join(__dirname, 'output');
+function outputFileFor(factionKey, edition) {
+  return path.join(OUTPUT_DIR, `army-lists-${factionKey}-${edition}-latest.json`);
+}
+
 function getArg(args, flag) {
   const idx = args.indexOf(flag);
   return idx !== -1 && idx + 1 < args.length ? args[idx + 1] : null;
-}
-
-function parseRecord(record) {
-  if (!record) return null;
-  const m = record.match(/(\d+)\s*[-–]\s*(\d+)(?:\s*[-–]\s*(\d+))?/);
-  if (!m) return null;
-  return {
-    wins: parseInt(m[1], 10),
-    losses: parseInt(m[2], 10),
-    draws: m[3] ? parseInt(m[3], 10) : 0,
-  };
-}
-
-function flattenLists(raw) {
-  const lists = [];
-  const seen = new Set();
-  for (const [sectionName, entries] of Object.entries(raw.sections || {})) {
-    for (const entry of entries) {
-      const key = [entry.playerName || entry.player, entry.event, entry.date].join('|');
-      if (seen.has(key)) continue;
-      seen.add(key);
-      lists.push({ ...entry, section: sectionName });
-    }
-  }
-  return lists;
 }
 
 function log(level, ...args) {
@@ -42,10 +27,9 @@ function log(level, ...args) {
 log.info  = (...a) => log('info',  ...a);
 log.warn  = (...a) => log('warn',  ...a);
 log.error = (...a) => log('error', ...a);
-log.debug = (...a) => log('debug', ...a);
 
 // Unit/points/detachment parsing lives in shared/list-summary.js (browser-safe,
 // inlined into the docs page). Re-exported so Node callers keep their import path.
-const { UNIT_REGEX, ALT_UNIT_REGEX, parseUnitsFromText, extractDetachment } = require('./shared/list-summary');
+const { parseUnitsFromText, extractDetachment } = require('./shared/list-summary');
 
-module.exports = { getArg, parseRecord, extractDetachment, flattenLists, log, UNIT_REGEX, ALT_UNIT_REGEX, parseUnitsFromText };
+module.exports = { OUTPUT_DIR, outputFileFor, getArg, extractDetachment, log, parseUnitsFromText };
