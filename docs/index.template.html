@@ -74,6 +74,11 @@
   .rec-text { font-size: 0.9rem; line-height: 1.5; }
   .mock-notice { background: #2a1e0a; border: 1px solid #d6891044; border-radius: 6px; padding: 8px 12px; color: #f0a32e; font-size: 0.8rem; margin-bottom: 8px; }
   .results-footer { text-align: center; color: var(--muted); font-size: 0.78rem; padding: 12px; }
+  .list-summary { margin-top: 10px; display: none; }
+  .summary-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { background: var(--bg3); border: 1px solid var(--border); border-radius: 999px; padding: 3px 10px; font-size: 0.78rem; color: var(--muted); }
+  .chip-ok { color: #3fb950; border-color: #23863666; }
+  .summary-warning { color: #f0a32e; font-size: 0.78rem; margin-top: 6px; }
   .api-key-status { font-size: 0.75rem; color: var(--muted); margin-top: 8px; }
   /* Modal */
   .modal-overlay { display: none; position: fixed; inset: 0; background: #000a; z-index: 100; align-items: center; justify-content: center; }
@@ -156,6 +161,7 @@ Plague Marines [130pts]
 
 Poxwalkers [50pts]
 ..."></textarea>
+      <div class="list-summary" id="listSummary"></div>
     </div>
     <button class="analyze-btn" id="analyzeBtn" disabled>Analyze List</button>
     <div class="api-key-status" id="apiKeyStatus"></div>
@@ -203,7 +209,8 @@ Poxwalkers [50pts]
 // ─────────────────────────────────────────────────────────────────────────────
 // SHARED MODULES (generated — inlined from shared/*.js by build-pages.js)
 // Provides: SUPPORTED_FACTIONS, MOCK_DATA, getMockData, scoreBand, esc,
-//           buildSystemText, buildUserMessage, extractJSON
+//           renderListSummaryHtml, summarizeList, parseUnitsFromText,
+//           extractDetachment, buildSystemText, buildUserMessage, extractJSON
 // ─────────────────────────────────────────────────────────────────────────────
 <!--SHARED_MODULES-->
 
@@ -229,7 +236,7 @@ let factionsWithRealData = new Set();
   updateApiKeyStatus();
 
   document.getElementById('factionSelect').addEventListener('change', checkReady);
-  document.getElementById('listText').addEventListener('input', checkReady);
+  document.getElementById('listText').addEventListener('input', () => { checkReady(); refreshSummary(); });
   document.querySelectorAll('input[name="edition"]').forEach((r) => {
     r.addEventListener('change', () => { buildFactionSelect(); checkReady(); });
   });
@@ -260,6 +267,14 @@ function checkReady() {
   btn.disabled = !(hasKey && hasFaction && hasText);
   if (!hasKey) btn.textContent = 'Enter API key in settings ⚙';
   else btn.textContent = 'Analyze List';
+}
+
+// Live pre-flight summary: what the parser sees, before any API tokens are spent.
+function refreshSummary() {
+  const el = document.getElementById('listSummary');
+  const summary = summarizeList(document.getElementById('listText').value);
+  el.innerHTML = renderListSummaryHtml(summary);
+  el.style.display = summary ? 'block' : 'none';
 }
 
 function updateApiKeyStatus() {

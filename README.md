@@ -10,6 +10,7 @@ AI-powered competitive analyzer for Warhammer 40,000 army lists. Paste your list
 - **11th and 10th Edition support** — 11th Edition is the default
 - **26 factions** with mock meta snapshots for all; live data for crawled factions
 - **AI analysis via Claude:** competitive score (1–10), strengths/weaknesses, meta comparison, recommendations
+- **Live pre-flight list summary:** as you paste, see the detected detachment, parsed unit count, and points total (vs. the declared total), with warnings when the list doesn't parse — before spending an API call
 - **GitHub Pages deployment:** static, no server required — Claude is called directly from the browser
 - **Local dev mode:** Express server keeps the API key server-side
 

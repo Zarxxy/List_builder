@@ -16,15 +16,6 @@ function parseRecord(record) {
   };
 }
 
-function extractDetachment(text) {
-  if (!text) return null;
-  const m = text.match(/Detachment:\s*(.+?)(?:\n|$)/i) ||
-            text.match(/Detachment\s*[-–:]\s*(.+?)(?:\n|$)/i);
-  // The GW 40K app wraps header lines in "+ ... +", e.g.
-  // "+ DETACHMENT: Plague Company +" — strip the trailing/leading decoration.
-  return m ? m[1].replace(/\s*\+\s*$/, '').replace(/^\+\s*/, '').trim() : null;
-}
-
 function flattenLists(raw) {
   const lists = [];
   const seen = new Set();
@@ -53,47 +44,8 @@ log.warn  = (...a) => log('warn',  ...a);
 log.error = (...a) => log('error', ...a);
 log.debug = (...a) => log('debug', ...a);
 
-// Points can be written as "pt"/"pts" or spelled out "point"/"Points". The
-// official Games Workshop 40K app — the dominant export format for modern
-// tournament lists — uses the spelled-out form, e.g. "Typhus (100 Points)".
-const POINTS_UNIT = '(?:pts?|points?)';
-const UNIT_REGEX = new RegExp(`^[•·\\-\\s]*(.+?)\\s*[([]\\s*(\\d+)\\s*${POINTS_UNIT}\\s*[\\])]`, 'gim');
-const ALT_UNIT_REGEX = new RegExp(`^[•·\\-\\s]*(.+?)\\s{2,}\\.{0,}?\\s*(\\d{2,4})\\s*${POINTS_UNIT}\\s*$`, 'gim');
-
-function parseUnitsFromText(text, maxNameLength) {
-  if (!text) return [];
-  const cap = maxNameLength || 80;
-  const units = [];
-  const seen = new Set();
-
-  UNIT_REGEX.lastIndex = 0;
-  let m;
-  while ((m = UNIT_REGEX.exec(text)) !== null) {
-    const rawName = m[1].trim().replace(/^[x×]\d+\s+/i, '').replace(/\s*[-–:]\s*$/, '');
-    const pts = parseInt(m[2], 10);
-    if (rawName && pts > 0 && rawName.length < cap) {
-      const key = rawName + '|' + pts;
-      if (!seen.has(key)) {
-        seen.add(key);
-        units.push({ name: rawName, points: pts });
-      }
-    }
-  }
-
-  ALT_UNIT_REGEX.lastIndex = 0;
-  while ((m = ALT_UNIT_REGEX.exec(text)) !== null) {
-    const rawName = m[1].trim().replace(/\.+$/, '').trim();
-    const pts = parseInt(m[2], 10);
-    if (rawName && pts > 0 && rawName.length < cap) {
-      const key = rawName + '|' + pts;
-      if (!seen.has(key)) {
-        seen.add(key);
-        units.push({ name: rawName, points: pts });
-      }
-    }
-  }
-
-  return units;
-}
+// Unit/points/detachment parsing lives in shared/list-summary.js (browser-safe,
+// inlined into the docs page). Re-exported so Node callers keep their import path.
+const { UNIT_REGEX, ALT_UNIT_REGEX, parseUnitsFromText, extractDetachment } = require('./shared/list-summary');
 
 module.exports = { getArg, parseRecord, extractDetachment, flattenLists, log, UNIT_REGEX, ALT_UNIT_REGEX, parseUnitsFromText };

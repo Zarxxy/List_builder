@@ -73,6 +73,11 @@
   .rec-text { font-size: 0.9rem; line-height: 1.5; }
   .mock-notice { background: #2a1e0a; border: 1px solid #d6891044; border-radius: 6px; padding: 8px 12px; color: #f0a32e; font-size: 0.8rem; margin-bottom: 8px; }
   .results-footer { text-align: center; color: var(--muted); font-size: 0.78rem; padding: 12px; }
+  .list-summary { margin-top: 10px; display: none; }
+  .summary-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { background: var(--bg3); border: 1px solid var(--border); border-radius: 999px; padding: 3px 10px; font-size: 0.78rem; color: var(--muted); }
+  .chip-ok { color: #3fb950; border-color: #23863666; }
+  .summary-warning { color: #f0a32e; font-size: 0.78rem; margin-top: 6px; }
   @media (max-width: 600px) { .sw-grid { grid-template-columns: 1fr; } }
 </style>
 </head>
@@ -121,6 +126,7 @@ Troops:
 • Plague Marines [100pts]
 
 etc."></textarea>
+      <div class="list-summary" id="listSummary"></div>
     </div>
 
     <button class="analyze-btn" id="analyzeBtn" disabled>Analyze List</button>
@@ -136,10 +142,12 @@ etc."></textarea>
 </main>
 
 <script src="/shared/format.js"></script>
+<script src="/shared/list-summary.js"></script>
 <script>
 'use strict';
 
-// esc() and scoreBand() come from /shared/format.js (loaded above).
+// esc() and scoreBand() come from /shared/format.js (loaded above);
+// summarizeList() and renderListSummaryHtml() from /shared/list-summary.js.
 let allFactions = [];
 const factionSelect = document.getElementById('factionSelect');
 const listText = document.getElementById('listText');
@@ -194,6 +202,14 @@ function rebuildFactionOptions() {
 function updateBtn() {
   const ready = factionSelect.value && listText.value.trim().length >= 10;
   analyzeBtn.disabled = !ready;
+}
+
+// Live pre-flight summary: what the parser sees, before any API tokens are spent.
+const summaryEl = document.getElementById('listSummary');
+function refreshSummary() {
+  const summary = summarizeList(listText.value);
+  summaryEl.innerHTML = renderListSummaryHtml(summary);
+  summaryEl.style.display = summary ? 'block' : 'none';
 }
 
 async function loadFactions() {
@@ -323,7 +339,7 @@ async function analyze() {
 
 document.querySelectorAll('input[name="edition"]').forEach(r => r.addEventListener('change', rebuildFactionOptions));
 factionSelect.addEventListener('change', updateBtn);
-listText.addEventListener('input', updateBtn);
+listText.addEventListener('input', () => { updateBtn(); refreshSummary(); });
 analyzeBtn.addEventListener('click', analyze);
 
 loadFactions();
