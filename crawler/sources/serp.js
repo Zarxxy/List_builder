@@ -49,11 +49,15 @@ async function fetchLists(faction, edition, opts = {}) {
     console.log(`[serp] Querying SerpAPI: ${query}`);
     try {
       const res = await fetch(serpUrl, { signal: AbortSignal.timeout(15000) });
+      if (!res.ok) throw new Error(`SerpAPI responded with HTTP ${res.status}`);
       const data = await res.json();
+      if (data.error) throw new Error(`SerpAPI error: ${data.error}`);
       serpResults = data.organic_results || [];
       fs.writeFileSync(cacheFile, JSON.stringify({ cachedAt: new Date().toISOString(), results: serpResults }, null, 2));
     } catch (err) {
-      console.warn(`[serp] SerpAPI request failed: ${err.message}`);
+      // Never echo the request URL/key into logs
+      const msg = String(err.message).split(apiKey).join('[SERPAPI_KEY]');
+      console.warn(`[serp] SerpAPI request failed: ${msg}`);
       return [];
     }
   }

@@ -93,6 +93,12 @@ The GitHub Actions workflow (`crawl-deploy.yml`) is **manual-only** — it does 
 
 On GitHub Pages, the API key is entered by the user in the settings panel (⚙) and stored in `sessionStorage` (cleared when the tab closes).
 
+### Supplying the SerpAPI key safely
+
+- **Locally:** copy `.env.example` to `.env` and set `SERPAPI_KEY=...` there. `.env` is gitignored and is loaded by both `server.js` and the crawler. Don't export the key inline on the command line — it ends up in shell history.
+- **GitHub Actions:** add it as a repository secret named `SERPAPI_KEY` (**Settings → Secrets and variables → Actions → New repository secret**). The crawl workflow already reads `${{ secrets.SERPAPI_KEY }}`; GitHub masks it in logs.
+- Never commit the key or paste it into code, issues, or PRs. If it ever leaks, regenerate it in the SerpAPI dashboard.
+
 ## Data Sources
 
 | Source | Enabled by default | Notes |
