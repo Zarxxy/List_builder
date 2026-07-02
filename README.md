@@ -1,12 +1,12 @@
 # WH40K List Analyzer
 
-AI-powered competitive analyzer for Warhammer 40,000 army lists. Paste your list, select your faction and edition, and get a scored analysis against real tournament meta data pulled from multiple sources.
+AI-powered competitive analyzer for Warhammer 40,000 army lists. Paste your list, select your faction and edition, and get a scored analysis against real tournament meta data gathered via SerpAPI.
 
 **Live app:** [GitHub Pages deployment](https://zarxxy.github.io/List_builder/) — bring your own Anthropic API key.
 
 ## Features
 
-- **Multi-source tournament data:** listhammer.info (Playwright), Goonhammer (HTTP), SerpAPI (optional)
+- **SerpAPI-driven tournament data:** Google Search discovers tournament-list articles (generic + site-targeted queries, e.g. Goonhammer/Woehammer); lists are then extracted from the discovered pages over plain HTTP — no browser automation, no per-site scrapers
 - **11th and 10th Edition support** — 11th Edition is the default
 - **26 factions** with mock meta snapshots for all; live data for crawled factions
 - **AI analysis via Claude:** competitive score (1–10), strengths/weaknesses, meta comparison, recommendations
@@ -18,7 +18,7 @@ AI-powered competitive analyzer for Warhammer 40,000 army lists. Paste your list
 
 - Node.js ≥ 20.0.0
 - Anthropic API key (for analysis)
-- SerpAPI key (optional — enables SerpAPI source)
+- SerpAPI key (required for crawling; the app itself runs without it)
 
 ## Setup
 
@@ -27,12 +27,12 @@ git clone https://github.com/Zarxxy/List_builder.git
 cd List_builder
 cp .env.example .env
 # Edit .env and fill in your keys
-npm install   # also installs Playwright Chromium via postinstall
+npm install
 ```
 
 ## Crawling Tournament Data
 
-Run a crawl to pull fresh lists from enabled sources:
+Crawling requires `SERPAPI_KEY` in `.env`. Run a crawl to pull fresh lists:
 
 ```bash
 # Death Guard — 11th Edition (default)
@@ -46,12 +46,11 @@ npm run crawl:aeldari
 
 # Any faction by name
 node crawler/index.js --faction "Orks" --edition 11ed
-
-# Specific sources only
-node crawler/index.js --faction "Death Guard" --sources listhammer,goonhammer
 ```
 
 Output is written to `output/army-lists-{faction}-{edition}-latest.json`.
+
+**SerpAPI cost:** one crawl issues at most `crawler.serp.maxQueries` searches (default 4 — one generic query plus one per site target), and responses are cached for 7 days, so re-crawling the same faction within a week costs nothing. On SerpAPI's 100-search free tier that's ~25 crawls/month. Tune `maxQueries`, `siteTargets`, `maxUrlFetches`, and the rest of the `crawler.serp` block in `config.json`.
 
 **After crawling**, restart the local server to refresh faction list counts.
 
@@ -79,14 +78,14 @@ node build-pages.js       # copy output/ → docs/data/ + write manifest.json
 git add docs/data/        # if you want to commit static data (optional)
 ```
 
-The GitHub Actions workflow (`crawl-deploy.yml`) is **manual-only** — it does not run on a schedule. Trigger it from the **Actions → "Crawl & Deploy to GitHub Pages" → Run workflow** button, choosing a faction and edition; it crawls the selected faction and deploys to Pages. This keeps SerpAPI usage under your control (one crawl ≈ one SerpAPI search, cached 7 days).
+The GitHub Actions workflow (`crawl-deploy.yml`) is **manual-only** — it does not run on a schedule. Trigger it from the **Actions → "Crawl & Deploy to GitHub Pages" → Run workflow** button, choosing a faction and edition; it crawls the selected faction and deploys to Pages. This keeps SerpAPI usage under your control (one crawl ≤ 4 SerpAPI searches by default, cached 7 days).
 
 ## Environment Variables
 
 | Variable | Required | Description |
 |---|---|---|
 | `ANTHROPIC_API_KEY` | Yes (local dev) | Claude API key — server-side only |
-| `SERPAPI_KEY` | No | Enables SerpAPI source; skip gracefully if absent |
+| `SERPAPI_KEY` | Yes (crawling only) | SerpAPI key — the crawler exits with an error if absent; server/analysis run without it |
 | `PORT` | No | HTTP port (default: 3000) |
 | `CLAUDE_MODEL` | No | Override model (default: `claude-sonnet-4-6`) |
 | `TRUST_PROXY` | No | Set to `1` when behind Nginx/Cloudflare |
@@ -101,15 +100,12 @@ On GitHub Pages, the API key is entered by the user in the settings panel (⚙) 
 
 ## Data Sources
 
-| Source | Enabled by default | Notes |
-|---|---|---|
-| **listhammer.info** | Yes | Playwright-based; full list text + event data |
-| **Goonhammer** | Yes | HTTP fetch; extracts lists from `<pre>`/`<code>` blocks |
-| **SerpAPI** | Yes (if key set) | Google Search API; caches results 7 days |
-| **BCP** | No | Best Coast Pairings — enable in `config.json`; may violate ToS |
-| **Tabletop.to** | No | Tabletop.to — enable in `config.json`; may violate ToS |
+SerpAPI (Google Search) is the sole data source. Discovery and extraction are two phases:
 
-To enable BCP or Tabletop.to (personal/research use only), add them to `enabledSources` in `config.json`.
+1. **Discovery** — up to `maxQueries` SerpAPI searches per crawl: a generic tournament-list query plus one `site:` query per entry in `crawler.serp.siteTargets` (default: goonhammer.com, woehammer.com). Results are deduplicated across queries, filtered against `skipDomains`, and cached for `serpCacheTTLDays` (7 days).
+2. **Extraction** — each discovered page is fetched over plain HTTP and army lists are pulled from `<pre>`/`<code>` blocks, validated for shape (≥5 units, ≥500 pts) and faction relevance before being kept.
+
+The previous per-site scrapers (listhammer.info via Playwright, Goonhammer, BCP, Tabletop.to) were removed in favor of this pipeline; they remain available in git history.
 
 ## API (Local Dev Server)
 

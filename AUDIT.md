@@ -239,6 +239,9 @@ error mapping (400/401/429/503, JSON 404 for `/api/*` before the SPA catch-all) 
 ## 6. Analysis Core & Crawler
 
 ### 6.1 Duplicated helpers across crawler sources — `serp.js`, `goonhammer.js`, `listhammer.js`
+> **✅ Resolved** — the shared helpers were consolidated into `crawler/lib/html.js`, and the per-site
+> scrapers were subsequently removed entirely when the crawler moved to SerpAPI-only gathering
+> (`serp.js` is now the sole source and imports everything from `crawler/lib/html.js`).
 1. **Location:** `crawler/sources/serp.js:7-50`, `crawler/sources/goonhammer.js:5-48`,
    `crawler/sources/listhammer.js:6-17`.
 2. **Current:** `sleep`, `detectEdition`, `EDITION_CUTOFF`, `MIN_UNITS`/`MIN_POINTS`, `isValidListBlock`,
@@ -249,6 +252,8 @@ error mapping (400/401/429/503, JSON 404 for `/api/*` before the SPA catch-all) 
 5. **Impact:** **Medium.**
 
 ### 6.2 Incorrectly-ordered HTML-entity decode — `serp.js:29-40`, `goonhammer.js:19-31`
+> **✅ Resolved** — the consolidated `extractTextFromHtml` in `crawler/lib/html.js` decodes `&amp;`
+> last, as recommended below.
 1. **Location:** `extractTextFromHtml`.
 2. **Current:** Replaces `&nbsp;` then `&amp;` then `&lt;`/`&gt;`. Because `&amp;` is decoded before
    `&lt;`/`&gt;`, an input like `&amp;lt;` becomes `&lt;` then `<` — double-decoding.
@@ -274,6 +279,7 @@ Same DRY root cause as §1.3; consolidate into the shared module. **Medium.**
 5. **Impact:** **Low.**
 
 ### 6.5 Dead import — `crawler/sources/bcp.js:3`
+> **✅ Resolved by removal** — `bcp.js` was deleted along with the other per-site scrapers.
 1. **Location:** `crawler/sources/bcp.js:3`.
 2. **Current:** `const { extractDetachment } = require('../../utils');` — never used (the fetcher is a
    stub that returns `[]`).
@@ -282,6 +288,9 @@ Same DRY root cause as §1.3; consolidate into the shared module. **Medium.**
 5. **Impact:** **Low.**
 
 ### 6.6 Scraping anti-bot evasion — `listhammer.js:34-39` (advisory)
+> **✅ Resolved by removal** — `listhammer.js`, `bcp.js`, and `tabletop-to.js` were deleted; the
+> crawler now discovers pages via SerpAPI and fetches them with plain HTTP (no browser automation,
+> no evasion techniques, no Playwright runtime dependency).
 1. **Location:** `crawler/sources/listhammer.js:34-39`, plus ToS warnings at `crawler/index.js:40-41`
    and header comments in `bcp.js` / `tabletop-to.js`.
 2. **Current:** The crawler spoofs `navigator.webdriver`, fakes `plugins`/`languages`, injects
@@ -296,6 +305,9 @@ Same DRY root cause as §1.3; consolidate into the shared module. **Medium.**
 5. **Impact:** **Medium (advisory).**
 
 ### 6.7 SerpAPI key in URL query string — `serp.js:88`
+> **Status: accepted constraint** — SerpAPI only accepts the key as a query parameter, so the
+> mitigation stands: the request URL is never logged, and error messages are scrubbed of the key
+> before logging (covered by a test in `tests/test-crawler-serp.js`).
 1. **Location:** `crawler/sources/serp.js:88`.
 2. **Current:** `…&api_key=${apiKey}` embedded in the request URL.
 3. **Problem:** Secrets in URLs can leak via proxy logs, referrers, and error traces. (The query text
@@ -323,6 +335,9 @@ Same DRY root cause as §1.3; consolidate into the shared module. **Medium.**
 5. **Impact:** **Medium.**
 
 ### 7.2 `postinstall` downloads a browser on every install — `package.json:25`
+> **✅ Resolved** — the `postinstall` script was removed and `playwright` dropped to a
+> devDependency (kept only as the driver for the optional `test:e2e` docs smoke test, which uses a
+> preinstalled Chromium). No install path downloads a browser anymore.
 1. **Location:** `package.json:25` — `"postinstall": "playwright install chromium --with-deps"`.
 2. **Current:** Runs on every `npm ci`, including the **test** CI job (`.github/workflows/test.yml`),
    which only runs `node --test` and never launches a browser.
@@ -352,6 +367,8 @@ Same DRY root cause as §1.3; consolidate into the shared module. **Medium.**
 5. **Impact:** **Medium.**
 
 ### 7.4 Vacuous test — `tests/test-crawler-merger.js:130-158`
+> **✅ Resolved by removal** — the `bcp` stub and its vacuous test were deleted; the serp source now
+> has real fetcher-level coverage in `tests/test-crawler-serp.js`.
 1. **Location:** `tests/test-crawler-merger.js:130-158`.
 2. **Current:** The `bcp createFetcher` test builds an elaborate mock page, but `bcp.js` is a stub that
    always returns `[]`, so the `if (result.length > 0) { …assertions… }` block never runs.
@@ -382,7 +399,7 @@ and several copies have already drifted — including the render logic, whose dr
 | `scoreBand` | `public/index.html:153` ↔ `docs/index.html:559` | identical |
 | `<style>` block (~70 lines) | `public/index.html:7-77` ↔ `docs/index.html:7-91` | identical core (+ docs-only modal styles) |
 | `renderResults`/`setLoading`/`showError`/`hideError` | `public/index.html` ↔ `docs/index.html` | **Drifted** — `public` escapes output, `docs` does not → **this drift is the XSS** |
-| Crawler helpers (`sleep`, `detectEdition`, `EDITION_CUTOFF`, `MIN_UNITS`/`MIN_POINTS`, `extractTextFromHtml`, `extractPreCodeBlocks`, `isValidListBlock`) | `serp.js` ↔ `goonhammer.js` ↔ `listhammer.js` | copy-paste (`extractTextFromHtml` already drifted) |
+| Crawler helpers (`sleep`, `detectEdition`, `EDITION_CUTOFF`, `MIN_UNITS`/`MIN_POINTS`, `extractTextFromHtml`, `extractPreCodeBlocks`, `isValidListBlock`) | `serp.js` ↔ `goonhammer.js` ↔ `listhammer.js` | **✅ Resolved** — consolidated into `crawler/lib/html.js`; per-site scrapers removed (SerpAPI-only crawler) |
 
 **Single high-leverage fix:** treat `public/index.html`'s escaped render logic + a shared
 `SUPPORTED_FACTIONS`/`MOCK_DATA`/prompt module as the source of truth, and **generate

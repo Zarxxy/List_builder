@@ -126,33 +126,3 @@ test('buildOutput counts sources correctly', () => {
   assert.ok(output.sources.listhammer >= 1);
   assert.ok(output.sources.goonhammer >= 1);
 });
-
-test('bcp createFetcher with mock browser returns ListEntry array', async () => {
-  const { createFetcher } = require('../crawler/sources/bcp');
-
-  const mockPage = {
-    goto: async () => {},
-    waitForTimeout: async () => {},
-    evaluate: async () => [{
-      armyListText: 'Detachment: Plague Company\nPlague Marines [100pts]\nPlague Marines [100pts]\nPlague Marines [100pts]\nBlightlord Terminators [200pts]',
-      event: 'Mock Event',
-      date: '2025-09-15',
-      playerName: 'Mock Player',
-      record: '4-2-0',
-    }],
-    close: async () => {},
-  };
-  const mockBrowser = { newPage: async () => mockPage };
-
-  const fetchLists = createFetcher(mockBrowser);
-  const result = await fetchLists('Death Guard', '11ed', { maxLists: 10, timeout: 5000 });
-
-  assert.ok(Array.isArray(result));
-  if (result.length > 0) {
-    const entry = result[0];
-    assert.ok('armyListText' in entry, 'Missing armyListText');
-    assert.ok('source' in entry, 'Missing source');
-    assert.ok('edition' in entry, 'Missing edition');
-    assert.ok('firstSeen' in entry, 'Missing firstSeen');
-  }
-});

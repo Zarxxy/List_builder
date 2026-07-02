@@ -19,9 +19,7 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies
-        # Unit tests and lint never launch a browser, so skip lifecycle scripts
-        # (the postinstall would otherwise download Chromium via Playwright).
-        run: npm ci --ignore-scripts
+        run: npm ci
 
       - name: Lint
         run: npm run lint

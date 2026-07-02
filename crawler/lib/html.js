@@ -1,7 +1,6 @@
 'use strict';
 
-// Shared HTML/list-parsing helpers for the fetch-based crawler sources
-// (serp, goonhammer). Previously these were copy-pasted into each source file.
+// Shared HTML/list-parsing helpers for the fetch-based crawler.
 const config = require('../../config.json');
 const { parseUnitsFromText } = require('../../utils');
 
@@ -49,6 +48,36 @@ function isValidListBlock(text) {
   return units.reduce((s, u) => s + u.points, 0) >= MIN_POINTS;
 }
 
+// Fetch a content page and return its HTML, or null when the response is
+// unusable (PDF, tiny page). Throws on network errors/timeouts.
+async function fetchHtml(url, { fetchImpl = fetch, timeoutMs = 15000 } = {}) {
+  const res = await fetchImpl(url, {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (compatible; wh40k-list-analyzer/1.0)',
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+    },
+    signal: AbortSignal.timeout(timeoutMs),
+  });
+  const ct = res.headers.get('content-type') || '';
+  if (ct.includes('application/pdf')) return null;
+  const text = await res.text();
+  if (text.length < 500) return null;
+  return text;
+}
+
+function extractPageDate(html) {
+  const m = html.match(/<time[^>]*datetime="([^"]+)"/i) ||
+            html.match(/"datePublished"\s*:\s*"([^"]+)"/i) ||
+            html.match(/(\d{4}-\d{2}-\d{2})/);
+  return m ? m[1] : null;
+}
+
+function extractPageTitle(html) {
+  const m = html.match(/<title>([^<]+)<\/title>/i) ||
+            html.match(/<h1[^>]*>([^<]+)<\/h1>/i);
+  return m ? m[1].trim() : null;
+}
+
 module.exports = {
   EDITION_CUTOFF,
   MIN_UNITS,
@@ -58,4 +87,7 @@ module.exports = {
   extractTextFromHtml,
   extractPreCodeBlocks,
   isValidListBlock,
+  fetchHtml,
+  extractPageDate,
+  extractPageTitle,
 };
