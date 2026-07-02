@@ -23,6 +23,21 @@ export default [
     },
   },
   {
+    // Playwright e2e tests are ES modules and reference browser globals inside
+    // page.evaluate() callbacks.
+    files: ['tests/e2e/**/*.mjs'],
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: 'module',
+      globals: { ...nodeGlobals, sessionStorage: 'readonly' },
+    },
+    rules: {
+      'no-unused-vars': 'warn',
+      'eqeqeq': 'error',
+      'no-empty': ['error', { allowEmptyCatch: true }],
+    },
+  },
+  {
     ignores: ['node_modules/', 'output/', 'public/', 'docs/'],
   },
 ];

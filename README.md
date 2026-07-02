@@ -10,6 +10,7 @@ AI-powered competitive analyzer for Warhammer 40,000 army lists. Paste your list
 - **11th and 10th Edition support** — 11th Edition is the default
 - **26 factions** with mock meta snapshots for all; live data for crawled factions
 - **AI analysis via Claude:** competitive score (1–10), strengths/weaknesses, meta comparison, recommendations
+- **Live pre-flight list summary:** as you paste, see the detected detachment, parsed unit count, and points total (vs. the declared total), with warnings when the list doesn't parse — before spending an API call
 - **GitHub Pages deployment:** static, no server required — Claude is called directly from the browser
 - **Local dev mode:** Express server keeps the API key server-side
 
@@ -78,7 +79,7 @@ node build-pages.js       # copy output/ → docs/data/ + write manifest.json
 git add docs/data/        # if you want to commit static data (optional)
 ```
 
-A GitHub Actions workflow (`crawl-deploy.yml`) runs every Sunday at 06:00 UTC and automatically crawls Death Guard + deploys to Pages.
+The GitHub Actions workflow (`crawl-deploy.yml`) is **manual-only** — it does not run on a schedule. Trigger it from the **Actions → "Crawl & Deploy to GitHub Pages" → Run workflow** button, choosing a faction and edition; it crawls the selected faction and deploys to Pages. This keeps SerpAPI usage under your control (one crawl ≈ one SerpAPI search, cached 7 days).
 
 ## Environment Variables
 
@@ -91,6 +92,12 @@ A GitHub Actions workflow (`crawl-deploy.yml`) runs every Sunday at 06:00 UTC an
 | `TRUST_PROXY` | No | Set to `1` when behind Nginx/Cloudflare |
 
 On GitHub Pages, the API key is entered by the user in the settings panel (⚙) and stored in `sessionStorage` (cleared when the tab closes).
+
+### Supplying the SerpAPI key safely
+
+- **Locally:** copy `.env.example` to `.env` and set `SERPAPI_KEY=...` there. `.env` is gitignored and is loaded by both `server.js` and the crawler. Don't export the key inline on the command line — it ends up in shell history.
+- **GitHub Actions:** add it as a repository secret named `SERPAPI_KEY` (**Settings → Secrets and variables → Actions → New repository secret**). The crawl workflow already reads `${{ secrets.SERPAPI_KEY }}`; GitHub masks it in logs.
+- Never commit the key or paste it into code, issues, or PRs. If it ever leaks, regenerate it in the SerpAPI dashboard.
 
 ## Data Sources
 

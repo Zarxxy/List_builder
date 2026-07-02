@@ -16,13 +16,6 @@ function parseRecord(record) {
   };
 }
 
-function extractDetachment(text) {
-  if (!text) return null;
-  const m = text.match(/Detachment:\s*(.+?)(?:\n|$)/i) ||
-            text.match(/Detachment\s*[-–:]\s*(.+?)(?:\n|$)/i);
-  return m ? m[1].trim() : null;
-}
-
 function flattenLists(raw) {
   const lists = [];
   const seen = new Set();
@@ -51,43 +44,8 @@ log.warn  = (...a) => log('warn',  ...a);
 log.error = (...a) => log('error', ...a);
 log.debug = (...a) => log('debug', ...a);
 
-const UNIT_REGEX = /^[•·\-\s]*(.+?)\s*[([]\s*(\d+)\s*pts?\s*[\])]/gim;
-const ALT_UNIT_REGEX = /^[•·\-\s]*(.+?)\s{2,}\.{0,}?\s*(\d{2,4})\s*pts?\s*$/gim;
-
-function parseUnitsFromText(text, maxNameLength) {
-  if (!text) return [];
-  const cap = maxNameLength || 80;
-  const units = [];
-  const seen = new Set();
-
-  UNIT_REGEX.lastIndex = 0;
-  let m;
-  while ((m = UNIT_REGEX.exec(text)) !== null) {
-    const rawName = m[1].trim().replace(/^[x×]\d+\s+/i, '').replace(/\s*[-–:]\s*$/, '');
-    const pts = parseInt(m[2], 10);
-    if (rawName && pts > 0 && rawName.length < cap) {
-      const key = rawName + '|' + pts;
-      if (!seen.has(key)) {
-        seen.add(key);
-        units.push({ name: rawName, points: pts });
-      }
-    }
-  }
-
-  ALT_UNIT_REGEX.lastIndex = 0;
-  while ((m = ALT_UNIT_REGEX.exec(text)) !== null) {
-    const rawName = m[1].trim().replace(/\.+$/, '').trim();
-    const pts = parseInt(m[2], 10);
-    if (rawName && pts > 0 && rawName.length < cap) {
-      const key = rawName + '|' + pts;
-      if (!seen.has(key)) {
-        seen.add(key);
-        units.push({ name: rawName, points: pts });
-      }
-    }
-  }
-
-  return units;
-}
+// Unit/points/detachment parsing lives in shared/list-summary.js (browser-safe,
+// inlined into the docs page). Re-exported so Node callers keep their import path.
+const { UNIT_REGEX, ALT_UNIT_REGEX, parseUnitsFromText, extractDetachment } = require('./shared/list-summary');
 
 module.exports = { getArg, parseRecord, extractDetachment, flattenLists, log, UNIT_REGEX, ALT_UNIT_REGEX, parseUnitsFromText };

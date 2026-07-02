@@ -4,35 +4,12 @@ const fs = require('fs');
 const path = require('path');
 const { parseUnitsFromText } = require('./utils');
 const { getMockData } = require('./mock-tournament-data');
+const { SUPPORTED_FACTIONS } = require('./shared/factions');
+const { buildSystemText, buildUserMessage, extractJSON } = require('./shared/prompt');
 
-const SUPPORTED_FACTIONS = [
-  { key: 'death-guard',         label: 'Death Guard' },
-  { key: 'space-marines',       label: 'Space Marines' },
-  { key: 'astra-militarum',     label: 'Astra Militarum' },
-  { key: 'aeldari',             label: 'Aeldari' },
-  { key: 'chaos-space-marines', label: 'Chaos Space Marines' },
-  { key: 'orks',                label: 'Orks' },
-  { key: 'tyranids',            label: 'Tyranids' },
-  { key: 'necrons',             label: 'Necrons' },
-  { key: 'tau-empire',          label: "T'au Empire" },
-  { key: 'drukhari',            label: 'Drukhari' },
-  { key: 'adeptus-mechanicus',  label: 'Adeptus Mechanicus' },
-  { key: 'adeptus-custodes',    label: 'Adeptus Custodes' },
-  { key: 'grey-knights',        label: 'Grey Knights' },
-  { key: 'dark-angels',         label: 'Dark Angels' },
-  { key: 'blood-angels',        label: 'Blood Angels' },
-  { key: 'space-wolves',        label: 'Space Wolves' },
-  { key: 'black-templars',      label: 'Black Templars' },
-  { key: 'deathwatch',          label: 'Deathwatch' },
-  { key: 'thousand-sons',       label: 'Thousand Sons' },
-  { key: 'world-eaters',        label: 'World Eaters' },
-  { key: 'chaos-daemons',       label: 'Chaos Daemons' },
-  { key: 'imperial-knights',    label: 'Imperial Knights' },
-  { key: 'chaos-knights',       label: 'Chaos Knights' },
-  { key: 'leagues-of-votann',   label: 'Leagues of Votann' },
-  { key: 'adepta-sororitas',    label: 'Adepta Sororitas' },
-  { key: 'genestealer-cults',   label: 'Genestealer Cults' },
-];
+const config = JSON.parse(fs.readFileSync(path.join(__dirname, 'config.json'), 'utf-8'));
+const DEFAULT_MODEL = (config.aiAnalysis && config.aiAnalysis.defaultModel) || 'claude-sonnet-4-6';
+const MAX_TOKENS = (config.aiAnalysis && config.aiAnalysis.maxTokens) || 2000;
 
 function normalizeListText(raw) {
   return raw
@@ -40,21 +17,6 @@ function normalizeListText(raw) {
     .replace(/ /g, ' ')
     .replace(/[‘’]/g, "'")
     .replace(/[“”]/g, '"');
-}
-
-function extractJSON(raw) {
-  const trimmed = raw.trim();
-  try { return JSON.parse(trimmed); } catch {}
-  const fenceMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (fenceMatch) {
-    try { return JSON.parse(fenceMatch[1].trim()); } catch {}
-  }
-  const firstBrace = trimmed.indexOf('{');
-  const lastBrace  = trimmed.lastIndexOf('}');
-  if (firstBrace !== -1 && lastBrace > firstBrace) {
-    try { return JSON.parse(trimmed.slice(firstBrace, lastBrace + 1)); } catch {}
-  }
-  return null;
 }
 
 function buildContextFromOutput(raw) {
@@ -113,81 +75,14 @@ function loadTournamentContext(faction, edition) {
   return { meta: { totalLists: 0 }, detachmentBreakdown: [], topUnitsByDetachment: {}, sources: {}, isMockData: false, edition: ed };
 }
 
+// Wrap the shared system text with an ephemeral cache_control block for the SDK.
 function buildSystemBlocks(faction, edition) {
-  const edLabel = edition === '11ed' ? '11th Edition' : '10th Edition';
-  const text = [
-    `You are an expert Warhammer 40,000 ${edLabel} competitive analyst.`,
-    `Evaluate a player's army list against the current tournament meta for their faction.`,
-    `Use your knowledge of ${edLabel} rules, points costs, detachments, and faction abilities.`,
-    '',
-    '=== ANALYSIS RULES — FOLLOW STRICTLY ===',
-    'RULE 1 — SCORE: Integer 1–10.',
-    '  1–3 Casual | 4–5 Below Meta | 6–7 Competitive | 8–9 Strong | 10 Meta-Optimal',
-    'RULE 2 — SCORE LABEL: "Casual" | "Below Meta" | "Competitive" | "Strong" | "Meta-Optimal"',
-    'RULE 3 — DETACHMENT ANALYSIS: ≤60 words on how well the list exploits its detachment.',
-    'RULE 4 — META EXPLANATION: ≤80 words on current meta context.',
-    '  Only reference units/detachments present in the provided tournament data.',
-    '  If data is marked as synthetic, note that clearly.',
-    'RULE 5 — STRENGTHS: Exactly 3 strings (not objects), each ≤20 words.',
-    'RULE 6 — WEAKNESSES: Exactly 3 strings (not objects), each ≤20 words.',
-    'RULE 7 — COMPARISON POINTS: Exactly 3 strings (not objects), each ≤25 words.',
-    '  Name specific units and their tournament frequency where provided.',
-    'RULE 8 — RECOMMENDATIONS: Exactly 3 strings (not objects), each ≤30 words.',
-    `  Actionable — reference tournament data and ${edLabel} rules.`,
-    'RULE 9 — VERDICT: Single sentence ≤25 words.',
-    'IMPORTANT: Respond with ONLY valid JSON. Start with { end with }.',
-  ].join('\n');
-
-  return [{ type: 'text', text, cache_control: { type: 'ephemeral' } }];
-}
-
-function buildUserMessage(listText, faction, edition, context) {
-  const edLabel = edition === '11ed' ? '11th Edition' : '10th Edition';
-  const { meta = {}, detachmentBreakdown = [], topUnitsByDetachment = {}, isMockData, sources = {} } = context || {};
-
-  const sourceStr = Object.entries(sources).map(([k, v]) => `${k}: ${v}`).join(', ') || 'none';
-  const dataSource = isMockData
-    ? 'Synthetic meta snapshot (approximate)'
-    : `Real tournament data — sources: ${sourceStr}`;
-
-  const lines = [
-    `=== TOURNAMENT META DATA: ${faction.toUpperCase()} (${edLabel}) ===`,
-    `Source: ${dataSource}`,
-    `Total lists: ${meta.totalLists || 0} | Last crawled: ${meta.crawledAt || 'N/A'}`,
-    '',
-  ];
-
-  if (detachmentBreakdown.length > 0) {
-    lines.push('DETACHMENT BREAKDOWN:');
-    for (const d of detachmentBreakdown) {
-      lines.push(`  ${d.detachment} — ${d.count} lists (${d.percentage}%)`);
-    }
-    lines.push('');
-  }
-
-  if (Object.keys(topUnitsByDetachment).length > 0) {
-    lines.push('TOP UNITS BY DETACHMENT:');
-    for (const [det, units] of Object.entries(topUnitsByDetachment)) {
-      if (units.length === 0) continue;
-      const unitStr = units.slice(0, 5).map((u) => `${u.name} (${u.frequency}%)`).join(', ');
-      lines.push(`  ${det}: ${unitStr}`);
-    }
-    lines.push('');
-  }
-
-  lines.push('=== SUBMITTED ARMY LIST ===');
-  lines.push(listText.slice(0, 5000));
-  lines.push('');
-  lines.push('=== REQUIRED OUTPUT SCHEMA ===');
-  lines.push('{ score, score_label, detachment_analysis, meta_explanation,');
-  lines.push('  strengths[], weaknesses[], comparison_points[], recommendations[], verdict }');
-
-  return lines.join('\n');
+  return [{ type: 'text', text: buildSystemText(faction, edition), cache_control: { type: 'ephemeral' } }];
 }
 
 async function analyzeList({ listText, faction, edition, apiKey, model }) {
   const ed = edition || '11ed';
-  const mod = model || 'claude-sonnet-4-6';
+  const mod = model || DEFAULT_MODEL;
   const normalized = normalizeListText(listText);
   const context = loadTournamentContext(faction, ed);
 
@@ -205,7 +100,7 @@ async function analyzeList({ listText, faction, edition, apiKey, model }) {
   async function call() {
     return client.messages.create({
       model: mod,
-      max_tokens: 2000,
+      max_tokens: MAX_TOKENS,
       system,
       messages: [{ role: 'user', content: userMsg }],
     });
@@ -244,4 +139,5 @@ module.exports = {
   extractJSON,
   normalizeListText,
   SUPPORTED_FACTIONS,
+  DEFAULT_MODEL,
 };

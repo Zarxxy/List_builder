@@ -2,52 +2,12 @@
 
 const fs = require('fs');
 const path = require('path');
-const { parseUnitsFromText, extractDetachment } = require('../../utils');
+const { extractDetachment } = require('../../utils');
+const config = require('../../config.json');
+const { detectEdition, sleep, extractPreCodeBlocks, isValidListBlock } = require('../lib/html');
 
-const EDITION_CUTOFF = new Date('2025-08-01');
-const MIN_UNITS = 5;
-const MIN_POINTS = 500;
-const CACHE_TTL_DAYS = 7;
+const CACHE_TTL_DAYS = config.crawler.serpCacheTTLDays || 7;
 const OUTPUT_DIR = path.join(__dirname, '..', '..', 'output');
-
-function detectEdition(dateStr) {
-  if (!dateStr) return null;
-  const d = new Date(dateStr);
-  return (!Number.isNaN(d.getTime()) && d >= EDITION_CUTOFF) ? '11ed' : '10ed';
-}
-
-function sleep(ms) {
-  return new Promise((r) => setTimeout(r, ms));
-}
-
-function isValidListBlock(text) {
-  const units = parseUnitsFromText(text);
-  if (units.length < MIN_UNITS) return false;
-  return units.reduce((s, u) => s + u.points, 0) >= MIN_POINTS;
-}
-
-function extractTextFromHtml(html) {
-  return html
-    .replace(/<script[\s\S]*?<\/script>/gi, '')
-    .replace(/<style[\s\S]*?<\/style>/gi, '')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/\s{2,}/g, ' ')
-    .trim();
-}
-
-function extractPreCodeBlocks(html) {
-  const blocks = [];
-  const preRe = /<pre[^>]*>([\s\S]*?)<\/pre>/gi;
-  const codeRe = /<code[^>]*>([\s\S]*?)<\/code>/gi;
-  let m;
-  while ((m = preRe.exec(html)) !== null) blocks.push(extractTextFromHtml(m[1]));
-  while ((m = codeRe.exec(html)) !== null) blocks.push(extractTextFromHtml(m[1]));
-  return blocks;
-}
 
 function extractPageDate(html) {
   const m = html.match(/<time[^>]*datetime="([^"]+)"/i) ||
@@ -89,11 +49,15 @@ async function fetchLists(faction, edition, opts = {}) {
     console.log(`[serp] Querying SerpAPI: ${query}`);
     try {
       const res = await fetch(serpUrl, { signal: AbortSignal.timeout(15000) });
+      if (!res.ok) throw new Error(`SerpAPI responded with HTTP ${res.status}`);
       const data = await res.json();
+      if (data.error) throw new Error(`SerpAPI error: ${data.error}`);
       serpResults = data.organic_results || [];
       fs.writeFileSync(cacheFile, JSON.stringify({ cachedAt: new Date().toISOString(), results: serpResults }, null, 2));
     } catch (err) {
-      console.warn(`[serp] SerpAPI request failed: ${err.message}`);
+      // Never echo the request URL/key into logs
+      const msg = String(err.message).split(apiKey).join('[SERPAPI_KEY]');
+      console.warn(`[serp] SerpAPI request failed: ${msg}`);
       return [];
     }
   }

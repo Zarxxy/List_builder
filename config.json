@@ -2,10 +2,7 @@
   "crawler": {
     "enabledSources": ["listhammer", "goonhammer", "serp"],
     "maxListsPerSource": 50,
-    "defaultDelay": 1500,
     "navTimeout": 60000,
-    "jsRenderWait": 3000,
-    "cfChallengeWait": 10000,
     "serpCacheTTLDays": 7,
     "editionCutoffDate": "2025-08-01"
   },

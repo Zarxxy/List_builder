@@ -1,51 +1,7 @@
 'use strict';
 
-const { parseUnitsFromText, extractDetachment } = require('../../utils');
-
-const EDITION_CUTOFF = new Date('2025-08-01');
-const MIN_UNITS = 5;
-const MIN_POINTS = 500;
-
-function detectEdition(dateStr) {
-  if (!dateStr) return null;
-  const d = new Date(dateStr);
-  return (!Number.isNaN(d.getTime()) && d >= EDITION_CUTOFF) ? '11ed' : '10ed';
-}
-
-function sleep(ms) {
-  return new Promise((r) => setTimeout(r, ms));
-}
-
-function extractTextFromHtml(html) {
-  return html
-    .replace(/<script[\s\S]*?<\/script>/gi, '')
-    .replace(/<style[\s\S]*?<\/style>/gi, '')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/\s{2,}/g, ' ')
-    .trim();
-}
-
-function isValidListBlock(text) {
-  const units = parseUnitsFromText(text);
-  if (units.length < MIN_UNITS) return false;
-  const totalPts = units.reduce((s, u) => s + u.points, 0);
-  return totalPts >= MIN_POINTS;
-}
-
-function extractPreCodeBlocks(html) {
-  const blocks = [];
-  const preRe = /<pre[^>]*>([\s\S]*?)<\/pre>/gi;
-  const codeRe = /<code[^>]*>([\s\S]*?)<\/code>/gi;
-  let m;
-  while ((m = preRe.exec(html)) !== null) blocks.push(extractTextFromHtml(m[1]));
-  while ((m = codeRe.exec(html)) !== null) blocks.push(extractTextFromHtml(m[1]));
-  return blocks;
-}
+const { extractDetachment } = require('../../utils');
+const { detectEdition, sleep, extractPreCodeBlocks, isValidListBlock } = require('../lib/html');
 
 function extractArticleLinks(html) {
   const links = [];

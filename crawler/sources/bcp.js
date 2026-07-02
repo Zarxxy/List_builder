@@ -1,7 +1,5 @@
 'use strict';
 
-const { extractDetachment } = require('../../utils');
-
 // BCP requires login for list access. DISABLED by default (ToS risk).
 // Enable by adding 'bcp' to enabledSources in config.json.
 

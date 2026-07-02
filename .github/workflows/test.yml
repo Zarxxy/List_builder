@@ -19,10 +19,15 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies
-        run: npm ci
+        # Unit tests and lint never launch a browser, so skip lifecycle scripts
+        # (the postinstall would otherwise download Chromium via Playwright).
+        run: npm ci --ignore-scripts
 
       - name: Lint
         run: npm run lint
 
       - name: Run tests
         run: npm test
+
+      - name: Verify docs/index.html is in sync with template + shared modules
+        run: npm run verify:pages
