@@ -11,6 +11,8 @@
 const POINTS_UNIT = '(?:pts?|points?)';
 const UNIT_REGEX = new RegExp(`^[•·\\-\\s]*(.+?)\\s*[([]\\s*(\\d+)\\s*${POINTS_UNIT}\\s*[\\])]`, 'gim');
 const ALT_UNIT_REGEX = new RegExp(`^[•·\\-\\s]*(.+?)\\s{2,}\\.{0,}?\\s*(\\d{2,4})\\s*${POINTS_UNIT}\\s*$`, 'gim');
+const DECLARED_TOTAL_REGEX = new RegExp(`total(?:\\s+army)?\\s+points?\\s*[-–:]?\\s*(\\d{3,5})\\s*${POINTS_UNIT}?`, 'i');
+const TITLE_POINTS_REGEX = new RegExp(`[([]\\s*(\\d{3,5})\\s*${POINTS_UNIT}\\s*[\\])]`, 'i');
 
 function parseUnitsFromText(text, maxNameLength) {
   if (!text) return [];
@@ -55,11 +57,19 @@ function extractDetachment(text) {
 // summarizeList can exclude it from unit parsing (it would otherwise be
 // counted as a 2000pt "unit").
 function findDeclaredPoints(text) {
-  let m = text.match(new RegExp(`total(?:\\s+army)?\\s+points?\\s*[-–:]?\\s*(\\d{3,5})\\s*${POINTS_UNIT}?`, 'i'));
-  if (m) return { points: parseInt(m[1], 10), titleLine: null };
   const firstLine = text.split('\n').find((l) => l.trim()) || '';
-  m = firstLine.match(new RegExp(`[([]\\s*(\\d{3,5})\\s*${POINTS_UNIT}\\s*[\\])]`, 'i'));
-  if (m) return { points: parseInt(m[1], 10), titleLine: firstLine };
+  const titleMatch = firstLine.match(TITLE_POINTS_REGEX);
+  const headerMatch = text.match(DECLARED_TOTAL_REGEX);
+  if (headerMatch) {
+    const points = parseInt(headerMatch[1], 10);
+    // A title line restating the declared total (e.g. "My Roster (2000 Points)"
+    // above a "Total Points: 2000" header) is not a unit — report it so
+    // summarizeList excludes it from unit parsing. A first line with a
+    // *different* points value could be a real unit, so it is left alone.
+    const titleLine = titleMatch && parseInt(titleMatch[1], 10) === points ? firstLine : null;
+    return { points, titleLine };
+  }
+  if (titleMatch) return { points: parseInt(titleMatch[1], 10), titleLine: firstLine };
   return null;
 }
 

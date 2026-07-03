@@ -123,15 +123,14 @@ async function analyze() {
     }
 
     const result = await res.json();
-    setLoading(false);
     renderResults(result);
   } catch (err) {
     clearTimeout(timer);
     if (err.name === 'AbortError') return showError('Analysis timed out after 90 seconds — please try again.');
     showError('Network error — is the server running?');
   } finally {
-    spinner.style.display = 'none';
-    analyzeBtn.disabled = !factionSelect.value || listText.value.trim().length < 10;
+    setLoading(false);
+    updateBtn();
   }
 }
 

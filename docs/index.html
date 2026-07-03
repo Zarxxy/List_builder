@@ -186,12 +186,18 @@ Poxwalkers [50pts]
 'use strict';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SHARED MODULES (generated — inlined from shared/*.js by build-pages.js)
+// SHARED MODULES (generated — inlined from shared/*.js by build-pages.js,
+// prefixed with the build-config consts MODEL_ID and MAX_TOKENS)
 // Provides: SUPPORTED_FACTIONS, MOCK_DATA, getMockData, scoreBand, esc,
-//           editionLabel, formatSources, renderListSummaryHtml,
+//           editionLabel, formatSources, dataSourceLine, renderListSummaryHtml,
 //           renderAnalysisHtml, summarizeList, parseUnitsFromText,
-//           extractDetachment, buildSystemText, buildUserMessage, extractJSON
+//           extractDetachment, buildContextFromOutput, outputBasename,
+//           buildSystemText, buildUserMessage, extractJSON
 // ─────────────────────────────────────────────────────────────────────────────
+// ── build config (from config.json via build-pages.js) ──
+const MODEL_ID = "claude-sonnet-4-6";
+const MAX_TOKENS = 2000;
+
 // ── shared/factions.js ──
 // Single source of truth for the supported faction list. Consumed directly by
 // Node (list-analyzer.js, crawler) and inlined into the static docs page by
@@ -459,6 +465,14 @@ function formatSources(sources) {
   return Object.entries(sources || {}).map(([k, v]) => `${k}: ${v}`).join(', ');
 }
 
+// One-line provenance of the meta context. Shared by the prompt builder and
+// the renderer so what the model is told and what the user sees never drift.
+function dataSourceLine(isMockData, sources) {
+  return isMockData
+    ? 'Synthetic meta snapshot (approximate)'
+    : `Real tournament data — sources: ${formatSources(sources) || 'none'}`;
+}
+
 // Escape a string for safe interpolation into innerHTML. Model output is
 // attacker-influenceable (it echoes the user-pasted army list), so every
 // interpolation must pass through this to prevent XSS.
@@ -494,7 +508,8 @@ function renderListSummaryHtml(summary) {
 //   isMockData   true when the analysis ran against the synthetic snapshot
 //   sources      per-source list counts ({ serp: 12 })
 //   totalLists   number of tournament lists behind the meta context
-//   footerNote   optional page-specific footer suffix (plain text)
+//   footerNote   optional page-specific footer suffix (plain text, e.g. the
+//                model name); the mock/live provenance is added automatically
 function renderAnalysisHtml(result, opts) {
   const { edition, isMockData, sources, totalLists, footerNote } = opts || {};
   const band = scoreBand(Number(result.score) || 0);
@@ -509,9 +524,8 @@ function renderAnalysisHtml(result, opts) {
   const mockNotice = isMockData
     ? '<div class="mock-notice">⚠ Using synthetic meta snapshot — crawl this faction for live tournament data.</div>'
     : '';
-  const dataLine = isMockData
-    ? 'Synthetic meta snapshot (approximate)'
-    : `Real tournament data — sources: ${formatSources(sources) || 'none'}`;
+  const dataLine = dataSourceLine(isMockData, sources);
+  const provenance = isMockData ? 'meta snapshot' : 'live data';
 
   return `
     <div class="score-badge score-${band}">
@@ -557,7 +571,7 @@ function renderAnalysisHtml(result, opts) {
     </details>
 
     <div class="results-footer">
-      Analyzed against ${Number(totalLists) || 0} lists (${editionLabel(edition)})${footerNote ? ' · ' + esc(footerNote) : ''}
+      Analyzed against ${Number(totalLists) || 0} lists (${editionLabel(edition)}) · ${provenance}${footerNote ? ' · ' + esc(footerNote) : ''}
     </div>
   `;
 }
@@ -576,6 +590,8 @@ function renderAnalysisHtml(result, opts) {
 const POINTS_UNIT = '(?:pts?|points?)';
 const UNIT_REGEX = new RegExp(`^[•·\\-\\s]*(.+?)\\s*[([]\\s*(\\d+)\\s*${POINTS_UNIT}\\s*[\\])]`, 'gim');
 const ALT_UNIT_REGEX = new RegExp(`^[•·\\-\\s]*(.+?)\\s{2,}\\.{0,}?\\s*(\\d{2,4})\\s*${POINTS_UNIT}\\s*$`, 'gim');
+const DECLARED_TOTAL_REGEX = new RegExp(`total(?:\\s+army)?\\s+points?\\s*[-–:]?\\s*(\\d{3,5})\\s*${POINTS_UNIT}?`, 'i');
+const TITLE_POINTS_REGEX = new RegExp(`[([]\\s*(\\d{3,5})\\s*${POINTS_UNIT}\\s*[\\])]`, 'i');
 
 function parseUnitsFromText(text, maxNameLength) {
   if (!text) return [];
@@ -620,11 +636,19 @@ function extractDetachment(text) {
 // summarizeList can exclude it from unit parsing (it would otherwise be
 // counted as a 2000pt "unit").
 function findDeclaredPoints(text) {
-  let m = text.match(new RegExp(`total(?:\\s+army)?\\s+points?\\s*[-–:]?\\s*(\\d{3,5})\\s*${POINTS_UNIT}?`, 'i'));
-  if (m) return { points: parseInt(m[1], 10), titleLine: null };
   const firstLine = text.split('\n').find((l) => l.trim()) || '';
-  m = firstLine.match(new RegExp(`[([]\\s*(\\d{3,5})\\s*${POINTS_UNIT}\\s*[\\])]`, 'i'));
-  if (m) return { points: parseInt(m[1], 10), titleLine: firstLine };
+  const titleMatch = firstLine.match(TITLE_POINTS_REGEX);
+  const headerMatch = text.match(DECLARED_TOTAL_REGEX);
+  if (headerMatch) {
+    const points = parseInt(headerMatch[1], 10);
+    // A title line restating the declared total (e.g. "My Roster (2000 Points)"
+    // above a "Total Points: 2000" header) is not a unit — report it so
+    // summarizeList excludes it from unit parsing. A first line with a
+    // *different* points value could be a real unit, so it is left alone.
+    const titleLine = titleMatch && parseInt(titleMatch[1], 10) === points ? firstLine : null;
+    return { points, titleLine };
+  }
+  if (titleMatch) return { points: parseInt(titleMatch[1], 10), titleLine: firstLine };
   return null;
 }
 
@@ -664,6 +688,65 @@ function summarizeList(text) {
   }
 
   return { units, unitCount: units.length, totalPoints, detachment, declaredPoints, warnings };
+}
+
+// Export for Node; the whole line is stripped when inlined into the browser.
+
+// ── shared/tournament-context.js ──
+// Normalizes a raw crawl artifact ({ crawledAt, faction, edition, totalLists,
+// sources, sections }) into the context shape the prompt builder and renderer
+// consume ({ meta, detachmentBreakdown, topUnitsByDetachment, ... }). Single
+// source of truth for Node (list-analyzer.js) and the docs page (inlined by
+// build-pages.js) — previously the docs page skipped this normalization and
+// fed the raw file to buildUserMessage, which silently dropped all live
+// tournament data from the prompt.
+
+// Basename of a crawl artifact. utils.js joins it onto output/ for Node
+// readers/writers; the docs page fetches it from ./data/.
+function outputBasename(factionKey, edition) {
+  return `army-lists-${factionKey}-${edition}-latest.json`;
+}
+
+function buildContextFromOutput(raw) {
+  const meta = {
+    faction: raw.faction,
+    totalLists: raw.totalLists || 0,
+    crawledAt: raw.crawledAt,
+    edition: raw.edition,
+    sources: raw.sources || {},
+  };
+
+  const detachmentBreakdown = Object.keys(raw.sections || {})
+    .filter((k) => k !== 'All' && k !== 'Unknown')
+    .map((det) => ({
+      detachment: det,
+      count: raw.sections[det].length,
+      percentage: ((raw.sections[det].length / (raw.totalLists || 1)) * 100).toFixed(1),
+    }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 6);
+
+  const topUnitsByDetachment = {};
+  for (const det of detachmentBreakdown) {
+    const entries = raw.sections[det.detachment] || [];
+    const tally = {};
+    for (const entry of entries) {
+      const units = parseUnitsFromText(entry.armyListText || '');
+      for (const u of units) {
+        tally[u.name] = (tally[u.name] || 0) + 1;
+      }
+    }
+    topUnitsByDetachment[det.detachment] = Object.entries(tally)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([name, count]) => ({
+        name,
+        count,
+        frequency: ((count / (entries.length || 1)) * 100).toFixed(1),
+      }));
+  }
+
+  return { meta, detachmentBreakdown, topUnitsByDetachment, sources: raw.sources || {}, isMockData: false, edition: raw.edition };
 }
 
 // Export for Node; the whole line is stripped when inlined into the browser.
@@ -712,10 +795,7 @@ function buildUserMessage(listText, factionKey, edition, context) {
   const edLabel = editionLabel(edition);
   const { meta = {}, detachmentBreakdown = [], topUnitsByDetachment = {}, isMockData, sources = {} } = context || {};
 
-  const sourceStr = formatSources(sources) || 'none';
-  const dataSource = isMockData
-    ? 'Synthetic meta snapshot (approximate)'
-    : `Real tournament data — sources: ${sourceStr}`;
+  const dataSource = dataSourceLine(isMockData, sources);
 
   const lines = [
     `=== TOURNAMENT META DATA: ${label.toUpperCase()} (${edLabel}) ===`,
@@ -776,15 +856,25 @@ function extractJSON(raw) {
 // UI for the static GitHub Pages build — calls api.anthropic.com directly with
 // a user-supplied session key. This file is inlined into docs/index.html by
 // build-pages.js AFTER the shared modules bundle, so the shared helpers below
-// are in scope as plain script globals. The model-id and max-tokens
-// placeholders (double-underscore tokens in analyze()) are substituted from
-// config.json at build time.
+// (and the build-config consts MODEL_ID / MAX_TOKENS emitted by the bundle
+// prelude) are in scope as plain script globals.
 /* global SUPPORTED_FACTIONS, getMockData, summarizeList, renderListSummaryHtml,
           renderAnalysisHtml, buildSystemText, buildUserMessage, extractJSON,
-          2000 */
+          buildContextFromOutput, outputBasename, MODEL_ID, MAX_TOKENS */
 
 // ── STATE ────────────────────────────────────────────────────────────────────
 let factionsWithRealData = new Set();
+
+const factionSelect = document.getElementById('factionSelect');
+const listTextEl    = document.getElementById('listText');
+const analyzeBtn    = document.getElementById('analyzeBtn');
+const listSummaryEl = document.getElementById('listSummary');
+const resultsEl     = document.getElementById('results');
+const spinnerEl     = document.getElementById('spinner');
+const errorBox      = document.getElementById('errorBox');
+const apiKeyStatus  = document.getElementById('apiKeyStatus');
+const settingsModal = document.getElementById('settingsModal');
+const apiKeyInput   = document.getElementById('apiKeyInput');
 
 // ── INIT ─────────────────────────────────────────────────────────────────────
 (async function init() {
@@ -800,18 +890,21 @@ let factionsWithRealData = new Set();
   buildFactionSelect();
   updateApiKeyStatus();
 
-  document.getElementById('factionSelect').addEventListener('change', checkReady);
-  document.getElementById('listText').addEventListener('input', () => { checkReady(); refreshSummary(); });
+  factionSelect.addEventListener('change', checkReady);
+  listTextEl.addEventListener('input', () => { checkReady(); refreshSummary(); });
   document.querySelectorAll('input[name="edition"]').forEach((r) => {
     r.addEventListener('change', () => { buildFactionSelect(); checkReady(); });
   });
 })();
 
+function getEdition() {
+  return document.querySelector('input[name="edition"]:checked').value;
+}
+
 function buildFactionSelect() {
-  const edition = document.querySelector('input[name="edition"]:checked').value;
-  const sel = document.getElementById('factionSelect');
-  const current = sel.value;
-  sel.innerHTML = '';
+  const edition = getEdition();
+  const current = factionSelect.value;
+  factionSelect.innerHTML = '';
   for (const f of SUPPORTED_FACTIONS) {
     const hasLive = factionsWithRealData.has(`${f.key}:${edition}`);
     const ctx = getMockData(f.key, edition);
@@ -819,46 +912,43 @@ function buildFactionSelect() {
     const opt = document.createElement('option');
     opt.value = f.key;
     opt.textContent = `${f.label} ${listCount}`;
-    sel.appendChild(opt);
+    factionSelect.appendChild(opt);
   }
-  if (current) sel.value = current;
+  if (current) factionSelect.value = current;
 }
 
 function checkReady() {
   const hasKey = !!sessionStorage.getItem('anthropic_key');
-  const hasFaction = !!document.getElementById('factionSelect').value;
-  const hasText = document.getElementById('listText').value.trim().length >= 10;
-  const btn = document.getElementById('analyzeBtn');
-  btn.disabled = !(hasKey && hasFaction && hasText);
-  if (!hasKey) btn.textContent = 'Enter API key in settings ⚙';
-  else btn.textContent = 'Analyze List';
+  const hasFaction = !!factionSelect.value;
+  const hasText = listTextEl.value.trim().length >= 10;
+  analyzeBtn.disabled = !(hasKey && hasFaction && hasText);
+  if (!hasKey) analyzeBtn.textContent = 'Enter API key in settings ⚙';
+  else analyzeBtn.textContent = 'Analyze List';
 }
 
 // Live pre-flight summary: what the parser sees, before any API tokens are spent.
 function refreshSummary() {
-  const el = document.getElementById('listSummary');
-  const summary = summarizeList(document.getElementById('listText').value);
-  el.innerHTML = renderListSummaryHtml(summary);
-  el.style.display = summary ? 'block' : 'none';
+  const summary = summarizeList(listTextEl.value);
+  listSummaryEl.innerHTML = renderListSummaryHtml(summary);
+  listSummaryEl.style.display = summary ? 'block' : 'none';
 }
 
 function updateApiKeyStatus() {
-  const el = document.getElementById('apiKeyStatus');
   const hasKey = !!sessionStorage.getItem('anthropic_key');
-  el.textContent = hasKey ? '✓ API key saved for this session' : 'No API key — click ⚙ to add one';
-  el.style.color = hasKey ? '#56d364' : '#f0a32e';
+  apiKeyStatus.textContent = hasKey ? '✓ API key saved for this session' : 'No API key — click ⚙ to add one';
+  apiKeyStatus.style.color = hasKey ? '#56d364' : '#f0a32e';
   checkReady();
 }
 
 // ── SETTINGS MODAL ───────────────────────────────────────────────────────────
 function openSettings() {
   const k = sessionStorage.getItem('anthropic_key') || '';
-  document.getElementById('apiKeyInput').value = k ? '••••••••••' + k.slice(-4) : '';
-  document.getElementById('settingsModal').classList.add('open');
+  apiKeyInput.value = k ? '••••••••••' + k.slice(-4) : '';
+  settingsModal.classList.add('open');
 }
-function closeSettings() { document.getElementById('settingsModal').classList.remove('open'); }
+function closeSettings() { settingsModal.classList.remove('open'); }
 function saveKey() {
-  const v = document.getElementById('apiKeyInput').value.trim();
+  const v = apiKeyInput.value.trim();
   if (v && !v.startsWith('••')) {
     sessionStorage.setItem('anthropic_key', v);
     updateApiKeyStatus();
@@ -867,29 +957,39 @@ function saveKey() {
 }
 function clearKey() {
   sessionStorage.removeItem('anthropic_key');
-  document.getElementById('apiKeyInput').value = '';
+  apiKeyInput.value = '';
   updateApiKeyStatus();
   closeSettings();
 }
 
 // ── ANALYZE ──────────────────────────────────────────────────────────────────
+
+// Tournament context for the prompt: a live crawl artifact (normalized through
+// the shared buildContextFromOutput, same as the Node server path) when one is
+// deployed and fetchable, otherwise the mock snapshot. isMockData is derived
+// from the context actually used — a failed data fetch falls back to mock and
+// must be labeled as such.
+async function loadContext(factionKey, edition) {
+  if (factionsWithRealData.has(`${factionKey}:${edition}`)) {
+    try {
+      const raw = await fetch(`./data/${outputBasename(factionKey, edition)}`).then((r) => r.json());
+      return buildContextFromOutput(raw);
+    } catch { /* fall through to mock */ }
+  }
+  return getMockData(factionKey, edition);
+}
+
 async function analyze() {
   const apiKey = sessionStorage.getItem('anthropic_key');
   if (!apiKey) { showError('Enter your Anthropic API key in settings ⚙'); return; }
 
-  const factionKey = document.getElementById('factionSelect').value;
-  const edition    = document.querySelector('input[name="edition"]:checked').value;
-  const listText   = document.getElementById('listText').value.trim();
+  const factionKey = factionSelect.value;
+  const edition    = getEdition();
+  const listText   = listTextEl.value.trim();
   if (!listText || listText.length < 10) { showError('Please paste your army list before analyzing.'); return; }
 
-  // Load tournament context
-  const dataKey = `${factionKey}:${edition}`;
-  let context = null;
-  if (factionsWithRealData.has(dataKey)) {
-    context = await fetch(`./data/army-lists-${factionKey}-${edition}-latest.json`)
-      .then((r) => r.json()).catch(() => null);
-  }
-  if (!context) context = getMockData(factionKey, edition);
+  const context = await loadContext(factionKey, edition);
+  const isMockData = !context || context.isMockData === true;
 
   const systemPrompt = buildSystemText(factionKey, edition);
   const userMessage  = buildUserMessage(listText, factionKey, edition, context);
@@ -911,8 +1011,8 @@ async function analyze() {
         'anthropic-dangerous-direct-browser-access': 'true',
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 2000,
+        model: MODEL_ID,
+        max_tokens: MAX_TOKENS,
         system: [{ type: 'text', text: systemPrompt }],
         messages: [{ role: 'user', content: userMessage }],
       }),
@@ -934,11 +1034,7 @@ async function analyze() {
       return showError('The analysis response was malformed — please try again.');
     }
 
-    renderResults(result, {
-      edition,
-      isMockData: !factionsWithRealData.has(dataKey),
-      context,
-    });
+    renderResults(result, { edition, isMockData, context });
   } catch (err) {
     clearTimeout(timer);
     if (err.name === 'AbortError') showError('Analysis timed out (90s) — please try again.');
@@ -950,38 +1046,31 @@ async function analyze() {
 
 // ── RENDER ───────────────────────────────────────────────────────────────────
 function renderResults(result, { edition, isMockData, context }) {
-  // context is either a crawled output file ({ totalLists, sources, ... }) or
-  // a mock snapshot ({ meta: { totalLists, sources }, ... }) — accept both.
-  const totalLists = context?.totalLists ?? context?.meta?.totalLists ?? 0;
-  const sources = context?.sources || context?.meta?.sources || {};
-
-  const el = document.getElementById('results');
-  el.innerHTML = renderAnalysisHtml(result, {
+  const meta = context?.meta || {};
+  resultsEl.innerHTML = renderAnalysisHtml(result, {
     edition,
     isMockData,
-    sources,
-    totalLists,
-    footerNote: isMockData ? 'meta snapshot' : 'live data',
+    sources: meta.sources || {},
+    totalLists: meta.totalLists || 0,
   });
-  el.style.display = 'block';
-  el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  resultsEl.style.display = 'block';
+  resultsEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function setLoading(on) {
-  document.getElementById('spinner').style.display = on ? 'block' : 'none';
-  document.getElementById('analyzeBtn').disabled = on;
-  if (on) document.getElementById('results').style.display = 'none';
+  spinnerEl.style.display = on ? 'block' : 'none';
+  analyzeBtn.disabled = on;
+  if (on) resultsEl.style.display = 'none';
 }
 
 function showError(msg) {
-  const el = document.getElementById('errorBox');
-  el.textContent = msg;
-  el.style.display = 'block';
+  errorBox.textContent = msg;
+  errorBox.style.display = 'block';
   setLoading(false);
 }
 
 function hideError() {
-  document.getElementById('errorBox').style.display = 'none';
+  errorBox.style.display = 'none';
 }
 
 // ── EVENT WIRING (no inline handlers) ────────────────────────────────────────
@@ -989,10 +1078,10 @@ document.getElementById('gearBtn').addEventListener('click', openSettings);
 document.getElementById('closeSettingsBtn').addEventListener('click', closeSettings);
 document.getElementById('saveKeyBtn').addEventListener('click', saveKey);
 document.getElementById('clearKeyBtn').addEventListener('click', clearKey);
-document.getElementById('analyzeBtn').addEventListener('click', analyze);
+analyzeBtn.addEventListener('click', analyze);
 
 // Close modal on overlay click
-document.getElementById('settingsModal').addEventListener('click', function(e) {
+settingsModal.addEventListener('click', function(e) {
   if (e.target === this) closeSettings();
 });
 </script>

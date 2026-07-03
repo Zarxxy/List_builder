@@ -70,6 +70,19 @@ test('summarizeList does not count a GW-app title line "(2000 points)" as a unit
   assert.equal(s.totalPoints, 385);
 });
 
+test('summarizeList excludes the title line even when a Total Points header also matches', () => {
+  const s = summarizeList('My Roster (2000 Points)\nTotal Points: 2000\nDetachment: Plague Company\nPlague Marines (100 Points)');
+  assert.equal(s.declaredPoints, 2000);
+  assert.equal(s.unitCount, 1);
+  assert.equal(s.totalPoints, 100);
+});
+
+test('summarizeList keeps a first-line unit whose points differ from the declared total', () => {
+  const s = summarizeList('Typhus (100 Points)\nTotal Points: 2000\nPlague Marines (100 Points)');
+  assert.equal(s.declaredPoints, 2000);
+  assert.equal(s.unitCount, 2);
+});
+
 test('summarizeList warns above 2000pts when no total is declared', () => {
   const s = summarizeList('Detachment: Big\nUnit A [1500pts]\nUnit B [900pts]');
   assert.ok(s.warnings.some((w) => /over the standard 2000pt/.test(w)), JSON.stringify(s.warnings));

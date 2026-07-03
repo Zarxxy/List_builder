@@ -3,11 +3,13 @@
 const path = require('path');
 
 // Crawl artifacts live here; one file per faction+edition, overwritten by each
-// crawl. The same names are matched by regex in build-pages.js and the docs
-// page (browser code — keep the pattern in sync with outputFileFor below).
+// crawl. The basename scheme is owned by shared/tournament-context.js (the
+// docs page fetches the same names from ./data/); build-pages.js matches them
+// by regex when copying.
+const { outputBasename } = require('./shared/tournament-context');
 const OUTPUT_DIR = path.join(__dirname, 'output');
 function outputFileFor(factionKey, edition) {
-  return path.join(OUTPUT_DIR, `army-lists-${factionKey}-${edition}-latest.json`);
+  return path.join(OUTPUT_DIR, outputBasename(factionKey, edition));
 }
 
 function getArg(args, flag) {

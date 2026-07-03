@@ -7,8 +7,9 @@ const path = require('node:path');
 
 const { SUPPORTED_FACTIONS, factionToKey } = require('../shared/factions');
 const { MOCK_DATA, getMockData } = require('../shared/mock-data');
-const { scoreBand, esc, editionLabel, formatSources, renderAnalysisHtml } = require('../shared/format');
+const { scoreBand, esc, editionLabel, formatSources, dataSourceLine, renderAnalysisHtml } = require('../shared/format');
 const { buildSystemText, buildUserMessage, extractJSON, factionLabel } = require('../shared/prompt');
+const { outputBasename, buildContextFromOutput } = require('../shared/tournament-context');
 const { config } = require('../config');
 
 // ── factions ────────────────────────────────────────────────────────────────
@@ -125,6 +126,12 @@ test('formatSources joins per-source counts and returns "" when empty', () => {
   assert.equal(formatSources(null), '');
 });
 
+test('dataSourceLine describes synthetic vs real data (shared by prompt + renderer)', () => {
+  assert.equal(dataSourceLine(true, {}), 'Synthetic meta snapshot (approximate)');
+  assert.equal(dataSourceLine(false, { serp: 4 }), 'Real tournament data — sources: serp: 4');
+  assert.equal(dataSourceLine(false, {}), 'Real tournament data — sources: none');
+});
+
 test('esc neutralizes HTML/script injection (the XSS class)', () => {
   const out = esc('<img src=x onerror="alert(1)">');
   assert.ok(!out.includes('<img'));
@@ -147,7 +154,7 @@ test('renderAnalysisHtml renders score band, sections, footer, and mock notice',
     recommendations: ['R1', 'R2'],
   };
   const html = renderAnalysisHtml(result, {
-    edition: '11ed', isMockData: true, sources: {}, totalLists: 32, footerNote: 'meta snapshot',
+    edition: '11ed', isMockData: true, sources: {}, totalLists: 32,
   });
   assert.ok(html.includes('score-competitive'));
   assert.ok(html.includes('Competitive'));
@@ -158,14 +165,57 @@ test('renderAnalysisHtml renders score band, sections, footer, and mock notice',
   assert.ok(html.includes('Analyzed against 32 lists (11th Edition) · meta snapshot'));
 });
 
-test('renderAnalysisHtml shows real sources and no mock notice for live data', () => {
+test('renderAnalysisHtml shows real sources, live-data footer, and page footerNote', () => {
   const html = renderAnalysisHtml({ score: 9 }, {
-    edition: '10ed', isMockData: false, sources: { serp: 4 }, totalLists: 4,
+    edition: '10ed', isMockData: false, sources: { serp: 4 }, totalLists: 4, footerNote: 'model: m-1',
   });
   assert.ok(!html.includes('mock-notice'));
   assert.ok(html.includes('Real tournament data — sources: serp: 4'));
   assert.ok(html.includes('score-strong'));
-  assert.ok(html.includes('(10th Edition)'));
+  assert.ok(html.includes('Analyzed against 4 lists (10th Edition) · live data · model: m-1'));
+});
+
+// ── tournament context (shared crawl-artifact normalizer) ────────────────────
+test('outputBasename names crawl artifacts consistently', () => {
+  assert.equal(outputBasename('death-guard', '11ed'), 'army-lists-death-guard-11ed-latest.json');
+});
+
+test('buildContextFromOutput extracts detachmentBreakdown correctly', () => {
+  const raw = {
+    faction: 'Death Guard',
+    edition: '11ed',
+    totalLists: 10,
+    crawledAt: '2025-09-01T00:00:00.000Z',
+    sources: { serp: 10 },
+    sections: {
+      All: [],
+      'Plague Company': Array(6).fill({ armyListText: 'Detachment: Plague Company\nPlague Marines [100pts]\nPlague Marines [100pts]\nPlague Marines [100pts]\nDeath Guard Lord [110pts]\nBlightlord Terminators [200pts]', detachment: 'Plague Company' }),
+      'Contagion of Nurgle': Array(4).fill({ armyListText: 'Detachment: Contagion of Nurgle\nPlague Marines [100pts]\nPlague Marines [100pts]\nPlague Marines [100pts]\nDeath Guard Lord [110pts]\nBlightlord Terminators [200pts]', detachment: 'Contagion of Nurgle' }),
+    },
+  };
+  const ctx = buildContextFromOutput(raw);
+  assert.equal(ctx.isMockData, false);
+  assert.equal(ctx.meta.totalLists, 10);
+  assert.equal(ctx.detachmentBreakdown.length, 2);
+  assert.equal(ctx.detachmentBreakdown[0].detachment, 'Plague Company');
+  assert.equal(ctx.detachmentBreakdown[0].count, 6);
+  assert.ok(ctx.topUnitsByDetachment['Plague Company'].length > 0);
+});
+
+test('buildContextFromOutput output feeds buildUserMessage with full meta (docs live-data path)', () => {
+  const raw = {
+    faction: 'Death Guard', edition: '11ed', totalLists: 4,
+    crawledAt: '2025-09-01T00:00:00.000Z', sources: { serp: 4 },
+    sections: {
+      All: [],
+      'Plague Company': Array(4).fill({ armyListText: 'Detachment: Plague Company\nPlague Marines [100pts]\nTyphus [80pts]\nBloat-drone [90pts]\nPoxwalkers [60pts]\nBlightlords [200pts]' }),
+    },
+  };
+  const msg = buildUserMessage('some list', 'death-guard', '11ed', buildContextFromOutput(raw));
+  assert.ok(msg.includes('Total lists: 4'), 'meta.totalLists did not reach the prompt');
+  assert.ok(msg.includes('DETACHMENT BREAKDOWN'), 'detachment breakdown did not reach the prompt');
+  assert.ok(msg.includes('TOP UNITS BY DETACHMENT'), 'top units did not reach the prompt');
+  assert.ok(msg.includes('serp: 4'), 'sources did not reach the prompt');
 });
 
 test('renderAnalysisHtml escapes every model-output field (the XSS class)', () => {

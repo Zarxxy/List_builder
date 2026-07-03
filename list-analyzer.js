@@ -1,10 +1,11 @@
 'use strict';
 
 const fs = require('fs');
-const { parseUnitsFromText, outputFileFor } = require('./utils');
+const { outputFileFor } = require('./utils');
 const { getMockData } = require('./shared/mock-data');
 const { SUPPORTED_FACTIONS } = require('./shared/factions');
 const { buildSystemText, buildUserMessage, extractJSON } = require('./shared/prompt');
+const { buildContextFromOutput } = require('./shared/tournament-context');
 const { DEFAULT_MODEL, MAX_TOKENS } = require('./config');
 
 function normalizeListText(raw) {
@@ -13,48 +14,6 @@ function normalizeListText(raw) {
     .replace(/ /g, ' ')
     .replace(/[‘’]/g, "'")
     .replace(/[“”]/g, '"');
-}
-
-function buildContextFromOutput(raw) {
-  const meta = {
-    faction: raw.faction,
-    totalLists: raw.totalLists || 0,
-    crawledAt: raw.crawledAt,
-    edition: raw.edition,
-    sources: raw.sources || {},
-  };
-
-  const detachmentBreakdown = Object.keys(raw.sections || {})
-    .filter((k) => k !== 'All' && k !== 'Unknown')
-    .map((det) => ({
-      detachment: det,
-      count: raw.sections[det].length,
-      percentage: ((raw.sections[det].length / (raw.totalLists || 1)) * 100).toFixed(1),
-    }))
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 6);
-
-  const topUnitsByDetachment = {};
-  for (const det of detachmentBreakdown) {
-    const entries = raw.sections[det.detachment] || [];
-    const tally = {};
-    for (const entry of entries) {
-      const units = parseUnitsFromText(entry.armyListText || '');
-      for (const u of units) {
-        tally[u.name] = (tally[u.name] || 0) + 1;
-      }
-    }
-    topUnitsByDetachment[det.detachment] = Object.entries(tally)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 10)
-      .map(([name, count]) => ({
-        name,
-        count,
-        frequency: ((count / (entries.length || 1)) * 100).toFixed(1),
-      }));
-  }
-
-  return { meta, detachmentBreakdown, topUnitsByDetachment, sources: raw.sources || {}, isMockData: false, edition: raw.edition };
 }
 
 function loadTournamentContext(faction, edition) {
@@ -129,7 +88,6 @@ async function analyzeList({ listText, faction, edition, apiKey, model }) {
 module.exports = {
   analyzeList,
   loadTournamentContext,
-  buildContextFromOutput,
   buildSystemBlocks,
   normalizeListText,
   SUPPORTED_FACTIONS,

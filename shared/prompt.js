@@ -5,7 +5,7 @@
 // build-pages.js. Previously duplicated (and drifted) between list-analyzer.js
 // and docs/index.html.
 const { SUPPORTED_FACTIONS } = require('./factions');
-const { editionLabel, formatSources } = require('./format');
+const { editionLabel, dataSourceLine } = require('./format');
 
 function factionLabel(factionKey) {
   const found = SUPPORTED_FACTIONS.find((f) => f.key === factionKey);
@@ -45,10 +45,7 @@ function buildUserMessage(listText, factionKey, edition, context) {
   const edLabel = editionLabel(edition);
   const { meta = {}, detachmentBreakdown = [], topUnitsByDetachment = {}, isMockData, sources = {} } = context || {};
 
-  const sourceStr = formatSources(sources) || 'none';
-  const dataSource = isMockData
-    ? 'Synthetic meta snapshot (approximate)'
-    : `Real tournament data — sources: ${sourceStr}`;
+  const dataSource = dataSourceLine(isMockData, sources);
 
   const lines = [
     `=== TOURNAMENT META DATA: ${label.toUpperCase()} (${edLabel}) ===`,

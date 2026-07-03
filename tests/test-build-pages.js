@@ -11,6 +11,11 @@ test('buildSharedBundle inlines shared modules without Node-only lines', () => {
   assert.ok(bundle.includes('function esc('));
   assert.ok(bundle.includes('function buildUserMessage('));
   assert.ok(bundle.includes('function renderAnalysisHtml('));
+  assert.ok(bundle.includes('function buildContextFromOutput('));
+  // Build-config consts must precede the modules (index.app.js references them).
+  assert.ok(/^\/\/ ── build config/.test(bundle), 'config prelude missing or not first');
+  assert.ok(bundle.includes(`const MODEL_ID = "${MODEL_ID}";`));
+  assert.ok(/const MAX_TOKENS = \d+;/.test(bundle));
   // No require()/module.exports/guard may leak into the browser bundle.
   assert.ok(!/=\s*require\(/.test(bundle), 'require() leaked into bundle');
   assert.ok(!/module\.exports/.test(bundle), 'module.exports leaked into bundle');
@@ -22,8 +27,6 @@ test('renderIndexHtml resolves every placeholder', () => {
   assert.ok(!html.includes('/*SHARED_STYLES*/'));
   assert.ok(!html.includes('<!--SHARED_MODULES-->'));
   assert.ok(!html.includes('<!--PAGE_SCRIPT-->'));
-  assert.ok(!html.includes('__MODEL_ID__'));
-  assert.ok(!html.includes('__MAX_TOKENS__'));
   assert.ok(html.includes(MODEL_ID), 'model id from config not injected');
 });
 

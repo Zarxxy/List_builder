@@ -25,6 +25,14 @@ function formatSources(sources) {
   return Object.entries(sources || {}).map(([k, v]) => `${k}: ${v}`).join(', ');
 }
 
+// One-line provenance of the meta context. Shared by the prompt builder and
+// the renderer so what the model is told and what the user sees never drift.
+function dataSourceLine(isMockData, sources) {
+  return isMockData
+    ? 'Synthetic meta snapshot (approximate)'
+    : `Real tournament data — sources: ${formatSources(sources) || 'none'}`;
+}
+
 // Escape a string for safe interpolation into innerHTML. Model output is
 // attacker-influenceable (it echoes the user-pasted army list), so every
 // interpolation must pass through this to prevent XSS.
@@ -60,7 +68,8 @@ function renderListSummaryHtml(summary) {
 //   isMockData   true when the analysis ran against the synthetic snapshot
 //   sources      per-source list counts ({ serp: 12 })
 //   totalLists   number of tournament lists behind the meta context
-//   footerNote   optional page-specific footer suffix (plain text)
+//   footerNote   optional page-specific footer suffix (plain text, e.g. the
+//                model name); the mock/live provenance is added automatically
 function renderAnalysisHtml(result, opts) {
   const { edition, isMockData, sources, totalLists, footerNote } = opts || {};
   const band = scoreBand(Number(result.score) || 0);
@@ -75,9 +84,8 @@ function renderAnalysisHtml(result, opts) {
   const mockNotice = isMockData
     ? '<div class="mock-notice">⚠ Using synthetic meta snapshot — crawl this faction for live tournament data.</div>'
     : '';
-  const dataLine = isMockData
-    ? 'Synthetic meta snapshot (approximate)'
-    : `Real tournament data — sources: ${formatSources(sources) || 'none'}`;
+  const dataLine = dataSourceLine(isMockData, sources);
+  const provenance = isMockData ? 'meta snapshot' : 'live data';
 
   return `
     <div class="score-badge score-${band}">
@@ -123,10 +131,10 @@ function renderAnalysisHtml(result, opts) {
     </details>
 
     <div class="results-footer">
-      Analyzed against ${Number(totalLists) || 0} lists (${editionLabel(edition)})${footerNote ? ' · ' + esc(footerNote) : ''}
+      Analyzed against ${Number(totalLists) || 0} lists (${editionLabel(edition)}) · ${provenance}${footerNote ? ' · ' + esc(footerNote) : ''}
     </div>
   `;
 }
 
 // Export for Node; skipped when loaded as a plain browser script.
-if (typeof module !== 'undefined' && module.exports) { module.exports = { scoreBand, esc, editionLabel, formatSources, renderListSummaryHtml, renderAnalysisHtml }; }
+if (typeof module !== 'undefined' && module.exports) { module.exports = { scoreBand, esc, editionLabel, formatSources, dataSourceLine, renderListSummaryHtml, renderAnalysisHtml }; }

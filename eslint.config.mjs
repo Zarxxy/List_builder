@@ -13,31 +13,32 @@ const browserGlobals = {
   setTimeout: 'readonly', clearTimeout: 'readonly', AbortController: 'readonly',
 };
 
+// One lint policy for the whole repo; blocks below only vary languageOptions.
+const sharedRules = {
+  'no-unused-vars': 'warn',
+  'eqeqeq': 'error',
+  'no-empty': ['error', { allowEmptyCatch: true }],
+};
+
 export default [
   js.configs.recommended,
   {
     files: ['**/*.js'],
     languageOptions: { ecmaVersion: 2022, sourceType: 'commonjs', globals: nodeGlobals },
     rules: {
-      'no-unused-vars': 'warn',
-      'eqeqeq': 'error',
+      ...sharedRules,
       'no-console': 'off',
-      'no-empty': ['error', { allowEmptyCatch: true }],
       'no-irregular-whitespace': ['error', { skipRegExps: true }],
     },
   },
   {
     // Browser page scripts (public/app.js is served as-is; docs/index.app.js
-    // is inlined into the generated docs page by build-pages.js). Shared
-    // helpers arrive as script-scope globals — declared via /* global */
-    // comments at the top of each file.
+    // is inlined into the generated docs page by build-pages.js). The base
+    // block above already applies the rules; this only swaps in browser
+    // globals. Shared helpers arrive as script-scope globals — declared via
+    // /* global */ comments at the top of each file.
     files: ['public/app.js', 'docs/index.app.js'],
     languageOptions: { ecmaVersion: 2022, sourceType: 'script', globals: browserGlobals },
-    rules: {
-      'no-unused-vars': 'warn',
-      'eqeqeq': 'error',
-      'no-empty': ['error', { allowEmptyCatch: true }],
-    },
   },
   {
     // Playwright e2e tests are ES modules and reference browser globals inside
@@ -48,11 +49,7 @@ export default [
       sourceType: 'module',
       globals: { ...nodeGlobals, ...browserGlobals },
     },
-    rules: {
-      'no-unused-vars': 'warn',
-      'eqeqeq': 'error',
-      'no-empty': ['error', { allowEmptyCatch: true }],
-    },
+    rules: sharedRules,
   },
   {
     ignores: ['node_modules/', 'output/', 'docs/index.html'],

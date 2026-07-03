@@ -60,8 +60,12 @@ async function main() {
 
   const outFile = outputFileFor(factionToKey(faction), edition);
 
-  if (output.totalLists === 0 && fs.existsSync(outFile)) {
-    log.error(`Crawl produced 0 lists — refusing to overwrite existing ${outFile}`);
+  // Never publish an empty dataset: a zero-list file would mark the faction as
+  // "live data" downstream (build-pages manifest → docs page), suppressing the
+  // mock-snapshot fallback. Fail the crawl instead.
+  if (output.totalLists === 0) {
+    const note = fs.existsSync(outFile) ? ` (keeping existing ${outFile})` : '';
+    log.error(`Crawl produced 0 lists — refusing to write an empty dataset${note}`);
     process.exit(1);
   }
 
