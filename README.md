@@ -48,11 +48,11 @@ npm run crawl:aeldari
 node crawler/index.js --faction "Orks" --edition 11ed
 ```
 
-Output is written to `output/army-lists-{faction}-{edition}-latest.json`.
+Output is written to `output/army-lists-{faction}-{edition}-latest.json`. Repeat crawls **accumulate**: new entries are merged into the existing file (deduplicated, keeping the earliest `firstSeen` per list) so the dataset grows over time. Pass `--fresh` to rebuild from the current crawl alone.
 
 **SerpAPI cost:** one crawl issues at most `crawler.serp.maxQueries` searches (default 4 — one generic query plus one per site target), and responses are cached for 7 days, so re-crawling the same faction within a week costs nothing. On SerpAPI's 100-search free tier that's ~25 crawls/month. Tune `maxQueries`, `siteTargets`, `maxUrlFetches`, and the rest of the `crawler.serp` block in `config.json`.
 
-**After crawling**, restart the local server to refresh faction list counts.
+**After crawling**, the local server picks up fresh list counts within a minute (the `/api/factions` cache has a 60s TTL) — no restart needed.
 
 ## Running Locally
 
@@ -80,6 +80,8 @@ git add docs/data/        # if you want to commit static data (optional)
 
 The GitHub Actions workflow (`crawl-deploy.yml`) is **manual-only** — it does not run on a schedule. Trigger it from the **Actions → "Crawl & Deploy to GitHub Pages" → Run workflow** button, choosing a faction and edition; it crawls the selected faction and deploys to Pages. This keeps SerpAPI usage under your control (one crawl ≤ 4 SerpAPI searches by default, cached 7 days).
 
+Note: the workflow checks out a fresh container, so crawl accumulation only compounds locally — each CI crawl starts from an empty `output/`. To accumulate in CI, seed `output/` from the currently deployed `docs/data/` before the crawl step.
+
 ## Environment Variables
 
 | Variable | Required | Description |
@@ -103,7 +105,7 @@ On GitHub Pages, the API key is entered by the user in the settings panel (⚙) 
 SerpAPI (Google Search) is the sole data source. Discovery and extraction are two phases:
 
 1. **Discovery** — up to `maxQueries` SerpAPI searches per crawl: a generic tournament-list query plus one `site:` query per entry in `crawler.serp.siteTargets` (default: goonhammer.com, woehammer.com). Results are deduplicated across queries, filtered against `skipDomains`, and cached for `serpCacheTTLDays` (7 days).
-2. **Extraction** — each discovered page is fetched over plain HTTP and army lists are pulled from `<pre>`/`<code>` blocks, validated for shape (≥5 units, ≥500 pts) and faction relevance before being kept.
+2. **Extraction** — discovered pages are fetched concurrently (per-domain politeness delay, retry with backoff on transient failures) and army lists are pulled from `<pre>`/`<code>` blocks **and** article body text (paragraphs/tables rendered as `<br>`-separated lines). Blocks are validated for shape — `<pre>`/`<code>` needs ≥5 units and ≥500 pts; body text is held to a stricter bar (≥8 units plus a unit-per-line density check, so battle-report prose is rejected) — and the requested faction must appear in the block's first 10 lines (`factionMatchWindowLines`). All thresholds live in `config.crawler.validation` and `config.crawler.serp`.
 
 The previous per-site scrapers (listhammer.info via Playwright, Goonhammer, BCP, Tabletop.to) were removed in favor of this pipeline; they remain available in git history.
 

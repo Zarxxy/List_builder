@@ -17,6 +17,10 @@ function getArg(args, flag) {
   return idx !== -1 && idx + 1 < args.length ? args[idx + 1] : null;
 }
 
+function hasFlag(args, flag) {
+  return args.includes(flag);
+}
+
 function log(level, ...args) {
   const ts = new Date().toISOString();
   const prefix = `[${ts}] [${level.toUpperCase()}]`;
@@ -34,4 +38,4 @@ log.error = (...a) => log('error', ...a);
 // inlined into the docs page). Re-exported so Node callers keep their import path.
 const { parseUnitsFromText, extractDetachment } = require('./shared/list-summary');
 
-module.exports = { OUTPUT_DIR, outputFileFor, getArg, extractDetachment, log, parseUnitsFromText };
+module.exports = { OUTPUT_DIR, outputFileFor, getArg, hasFlag, extractDetachment, log, parseUnitsFromText };

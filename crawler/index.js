@@ -3,15 +3,16 @@
 require('dotenv').config();
 
 const fs = require('fs');
-const { getArg, log, outputFileFor, OUTPUT_DIR } = require('../utils');
+const { getArg, hasFlag, log, outputFileFor, OUTPUT_DIR } = require('../utils');
 const { factionToKey } = require('../shared/factions');
-const { normalize, deduplicate, buildOutput } = require('./merger');
+const { normalize, deduplicate, buildOutput, entriesFromOutput } = require('./merger');
 const { config } = require('../config');
 
 const args = process.argv.slice(2);
 
 const faction  = getArg(args, '--faction')  || 'Death Guard';
 const edition  = getArg(args, '--edition')  || '11ed';
+const fresh    = hasFlag(args, '--fresh');
 const sourcesArg = getArg(args, '--sources');
 const sources = sourcesArg
   ? sourcesArg.split(',').map((s) => s.trim())
@@ -53,19 +54,39 @@ async function main() {
   }
 
   const normalized = normalize(allEntries, edition);
-  const deduped = deduplicate(normalized);
+  const outFile = outputFileFor(factionToKey(faction), edition);
+
+  // Accumulate across runs: merge the previous dataset back in (prior entries
+  // first, so on dedup collisions the earliest firstSeen and the established
+  // survivor win). --fresh rebuilds from this crawl alone.
+  let combined = normalized;
+  if (!fresh && fs.existsSync(outFile)) {
+    try {
+      const existing = JSON.parse(fs.readFileSync(outFile, 'utf-8'));
+      const prior = normalize(entriesFromOutput(existing), existing.edition || edition);
+      if (normalized.length === 0 && prior.length > 0) {
+        // Nothing new this run: leave the existing dataset untouched rather
+        // than rewriting it with a fresh crawledAt it did not earn.
+        log.warn(`Crawl produced 0 new lists — keeping existing dataset (${prior.length} lists in ${outFile})`);
+        process.exit(0);
+      }
+      log.info(`Merging with existing dataset (${prior.length} entries)`);
+      combined = prior.concat(normalized);
+    } catch (err) {
+      log.warn(`Could not read existing ${outFile}: ${err.message} — proceeding with this crawl only`);
+    }
+  }
+
+  const deduped = deduplicate(combined);
   const output = buildOutput(deduped, faction, edition);
 
-  log.info(`Total after dedup: ${output.totalLists} lists from ${Object.keys(output.sources).join(', ')}`);
-
-  const outFile = outputFileFor(factionToKey(faction), edition);
+  log.info(`Total after merge+dedup: ${output.totalLists} lists (${normalized.length} from this crawl)`);
 
   // Never publish an empty dataset: a zero-list file would mark the faction as
   // "live data" downstream (build-pages manifest → docs page), suppressing the
   // mock-snapshot fallback. Fail the crawl instead.
   if (output.totalLists === 0) {
-    const note = fs.existsSync(outFile) ? ` (keeping existing ${outFile})` : '';
-    log.error(`Crawl produced 0 lists — refusing to write an empty dataset${note}`);
+    log.error('Crawl produced 0 lists — refusing to write an empty dataset');
     process.exit(1);
   }
 
