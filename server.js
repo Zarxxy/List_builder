@@ -17,7 +17,9 @@ function getListCount(factionKey, edition) {
   catch { return 0; }
 }
 
-let factionsCache = null;
+// Short TTL so list counts refresh after a crawl without a server restart.
+const FACTIONS_CACHE_TTL_MS = 60 * 1000;
+let factionsCache = { data: null, builtAt: 0 };
 function buildFactionsCache() {
   return SUPPORTED_FACTIONS.map((f) => ({
     ...f,
@@ -56,8 +58,10 @@ function rateLimit(req, res, next) {
 }
 
 app.get('/api/factions', (_req, res) => {
-  if (!factionsCache) factionsCache = buildFactionsCache();
-  res.json({ factions: factionsCache });
+  if (!factionsCache.data || Date.now() - factionsCache.builtAt > FACTIONS_CACHE_TTL_MS) {
+    factionsCache = { data: buildFactionsCache(), builtAt: Date.now() };
+  }
+  res.json({ factions: factionsCache.data });
 });
 
 app.post('/api/analyze', rateLimit, async (req, res) => {
@@ -100,10 +104,9 @@ app.get('*', (_req, res) => res.sendFile(path.join(__dirname, 'public', 'index.h
 // import `app` without binding a port.
 if (require.main === module) {
   app.listen(PORT, () => {
-    factionsCache = buildFactionsCache();
+    factionsCache = { data: buildFactionsCache(), builtAt: Date.now() };
     console.log(`[server] WH40K List Analyzer at http://localhost:${PORT}`);
     console.log(`[server] API key: ${process.env.ANTHROPIC_API_KEY ? 'configured' : 'MISSING'}`);
-    console.log('[server] Note: restart server after running a crawl to refresh list counts.');
   });
 }
 

@@ -290,6 +290,32 @@ test('fetchLists keeps one copy when the same list appears in <pre> and body tex
   assert.equal(result.length, 1);
 });
 
+test('fetchLists drops blocks that only mention the faction outside the header window', async () => {
+  // Valid Orks list; "Death Guard" appears on line 12 (matchup commentary),
+  // past the 10-line factionMatchWindowLines — must not leak into a DG crawl.
+  const orksWithDgMention = [
+    'Orks — Detachment: War Horde',
+    'Warboss [90pts]',
+    'Boyz [180pts]',
+    'Meganobz [210pts]',
+    'Deff Dread [140pts]',
+    'Battlewagon [175pts]',
+    'Stormboyz [65pts]',
+    'Lootas [50pts]',
+    'Gretchin [40pts]',
+    'Trukk [65pts]',
+    'Notes:',
+    'Round 2 was a hard matchup into Death Guard.',
+  ].join('\n');
+  const html = `<html><head><title>Orks GT Report</title></head><body>
+    <pre>${orksWithDgMention}</pre>
+    ${FILLER}</body></html>`;
+  const result = await fetchLists('Death Guard', '11ed', {
+    fetchImpl: makePageFetchImpl(html), cacheDir: makeCacheDir(), sleepMs: 0,
+  });
+  assert.deepEqual(result, []);
+});
+
 test('fetchLists ignores body prose that fails the density check', async () => {
   const prose = Array.from({ length: 40 }, (_, i) => `Turn commentary line ${i} about positioning and secondaries.`).join('<br>');
   const html = `<html><head><title>Prose Report</title></head><body>

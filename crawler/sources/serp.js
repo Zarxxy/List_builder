@@ -32,6 +32,7 @@ const SERP_DEFAULTS = {
   siteTargets: ['goonhammer.com', 'woehammer.com'],
   skipDomains: ['reddit.com', 'youtube.com', 'facebook.com'],
   requireFactionMatch: true,
+  factionMatchWindowLines: 10,
   fetchTimeoutMs: 15000,
 };
 
@@ -96,6 +97,13 @@ function dedupeSerpResults(results, serpCfg = serpConfig()) {
     if (out.length >= serpCfg.maxUrlFetches) break;
   }
   return out;
+}
+
+// First N lines of a block — the faction name sits in the header of GW-app
+// exports and roundup lists, while matchup commentary further down can name
+// any faction. windowLines = 0 means match against the whole block.
+function blockHeader(text, windowLines) {
+  return windowLines > 0 ? text.split('\n').slice(0, windowLines).join('\n') : text;
 }
 
 // Whitespace-insensitive hash for spotting the same list twice on one page.
@@ -228,9 +236,11 @@ async function fetchLists(faction, edition, opts = {}) {
       const hash = blockHash(text);
       if (seenBlockHashes.has(hash)) continue;
       seenBlockHashes.add(hash);
-      // SERP surfaces multi-faction roundup articles; keep only blocks that
-      // actually mention the requested faction.
-      if (serpCfg.requireFactionMatch && !matchesFaction(text)) continue;
+      // SERP surfaces multi-faction roundup articles; keep only blocks whose
+      // header mentions the requested faction (a mention further down is
+      // usually matchup commentary about an opponent).
+      if (serpCfg.requireFactionMatch &&
+          !matchesFaction(blockHeader(text, serpCfg.factionMatchWindowLines))) continue;
       kept[kind]++;
       results.push({
         playerName: null,
