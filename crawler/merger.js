@@ -24,8 +24,18 @@ function datesWithin7Days(a, b) {
   return Math.abs(a.getTime() - b.getTime()) <= 7 * 24 * 60 * 60 * 1000;
 }
 
+// Whitespace-insensitive so re-crawled copies of a list still collide when
+// extraction whitespace shifts (e.g. a site reformats, or extraction rules
+// change between runs of an accumulating dataset).
 function contentHash(text) {
-  return crypto.createHash('sha256').update((text || '').slice(0, 500)).digest('hex');
+  const normalized = (text || '').toLowerCase().replace(/\s+/g, ' ').slice(0, 500);
+  return crypto.createHash('sha256').update(normalized).digest('hex');
+}
+
+function minIso(a, b) {
+  if (!a) return b;
+  if (!b) return a;
+  return a < b ? a : b;
 }
 
 function normalize(entries, defaultEdition) {
@@ -61,8 +71,16 @@ function deduplicate(entries) {
         const [ep, ee] = key.split('\x00');
         const existDate = parseDate(existing.date);
         if (ep === np && ee === ne && datesWithin7Days(date, existDate)) {
+          // Longer text wins, but the earliest sighting is preserved so an
+          // accumulated dataset keeps honest firstSeen values. Entries here
+          // are fresh objects from normalize()/JSON.parse, so mutating the
+          // survivor in place is safe.
+          const firstSeen = minIso(entry.firstSeen, existing.firstSeen);
           if (entry.armyListText.length > existing.armyListText.length) {
+            entry.firstSeen = firstSeen;
             byPrimaryKey.set(key, entry);
+          } else {
+            existing.firstSeen = firstSeen;
           }
           matched = true;
           break;
@@ -84,9 +102,12 @@ function deduplicate(entries) {
     const units = parseUnitsFromText(entry.armyListText);
     if (units.length >= 3) {
       const hash = contentHash(entry.armyListText);
-      if (!byHashKey.has(hash)) {
-        byHashKey.set(hash, true);
+      const survivor = byHashKey.get(hash);
+      if (!survivor) {
+        byHashKey.set(hash, entry);
         result.push(entry);
+      } else {
+        survivor.firstSeen = minIso(survivor.firstSeen, entry.firstSeen);
       }
     } else {
       result.push(entry);
@@ -94,6 +115,12 @@ function deduplicate(entries) {
   }
 
   return result;
+}
+
+// Flat entry list from a previously written crawl output file, for merging
+// a new crawl into the accumulated dataset.
+function entriesFromOutput(output) {
+  return (output && output.sections && output.sections.All) || [];
 }
 
 function buildOutput(entries, faction, edition) {
@@ -119,4 +146,4 @@ function buildOutput(entries, faction, edition) {
   };
 }
 
-module.exports = { normalize, deduplicate, buildOutput };
+module.exports = { normalize, deduplicate, buildOutput, entriesFromOutput };

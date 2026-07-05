@@ -16,9 +16,11 @@ const { factionToKey } = require('../../shared/factions');
 const { editionLabel } = require('../../shared/format');
 const { config } = require('../../config');
 const {
-  detectEdition, sleep, extractPreCodeBlocks, isValidListBlock,
+  detectEdition, sleep, validationConfig, extractPreCodeBlocks,
+  extractBodyTextBlocks, isValidListBlock,
   fetchHtml, extractPageDate, extractPageTitle,
 } = require('../lib/html');
+const { fetchWithRetry, mapWithConcurrency, makeDomainThrottle } = require('../lib/net');
 
 const CACHE_TTL_DAYS = config.crawler.serpCacheTTLDays || 7;
 const CACHE_VERSION = 2;
@@ -31,7 +33,12 @@ const SERP_DEFAULTS = {
   siteTargets: ['goonhammer.com', 'woehammer.com'],
   skipDomains: ['reddit.com', 'youtube.com', 'facebook.com'],
   requireFactionMatch: true,
+  factionMatchWindowLines: 10,
   fetchTimeoutMs: 15000,
+  concurrency: 3,
+  retries: 2,
+  retryBaseDelayMs: 500,
+  perDomainDelayMs: 500,
 };
 
 function serpConfig() {
@@ -97,6 +104,19 @@ function dedupeSerpResults(results, serpCfg = serpConfig()) {
   return out;
 }
 
+// First N lines of a block — the faction name sits in the header of GW-app
+// exports and roundup lists, while matchup commentary further down can name
+// any faction. windowLines = 0 means match against the whole block.
+function blockHeader(text, windowLines) {
+  return windowLines > 0 ? text.split('\n').slice(0, windowLines).join('\n') : text;
+}
+
+// Whitespace-insensitive hash for spotting the same list twice on one page.
+function blockHash(text) {
+  const normalized = (text || '').toLowerCase().replace(/\s+/g, ' ').slice(0, 500);
+  return crypto.createHash('sha256').update(normalized).digest('hex');
+}
+
 function factionMatcher(faction) {
   const patterns = config.factionPatterns[faction] ||
     [faction.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')];
@@ -110,7 +130,8 @@ async function fetchLists(faction, edition, opts = {}) {
     fetchImpl = fetch,
     cacheDir = OUTPUT_DIR,
     now = () => new Date(),
-    sleepMs = 500,
+    sleepMs,   // overrides serpCfg.perDomainDelayMs (tests pass 0)
+    sleepFn = sleep,
   } = opts;
   const serpCfg = serpConfig();
 
@@ -150,9 +171,9 @@ async function fetchLists(faction, edition, opts = {}) {
     if (spec.start > 0) params.set('start', String(spec.start));
     console.log(`[serp] Querying SerpAPI: ${spec.q}`);
     try {
-      const res = await fetchImpl(`https://serpapi.com/search.json?${params}`, {
+      const res = await fetchWithRetry(`https://serpapi.com/search.json?${params}`, () => ({
         signal: AbortSignal.timeout(serpCfg.fetchTimeoutMs),
-      });
+      }), { fetchImpl, retries: serpCfg.retries, baseDelayMs: serpCfg.retryBaseDelayMs, sleepFn });
       if (!res.ok) throw new Error(`SerpAPI responded with HTTP ${res.status}`);
       const data = await res.json();
       if (data.error) throw new Error(`SerpAPI error: ${data.error}`);
@@ -178,46 +199,89 @@ async function fetchLists(faction, edition, opts = {}) {
   console.log(`[serp] Processing ${candidates.length} result URLs`);
 
   const matchesFaction = factionMatcher(faction);
-  const results = [];
+  const thresholds = validationConfig();
+  const throttle = makeDomainThrottle(
+    sleepMs !== undefined ? sleepMs : serpCfg.perDomainDelayMs, { sleepFn });
 
-  for (const candidate of candidates) {
-    if (results.length >= maxLists) break;
-    if (sleepMs > 0) await sleep(sleepMs);
+  // Bounded-concurrency fetch of the candidate pages, throttled per domain.
+  // `collected` stops NEW pages being scheduled once maxLists is reached;
+  // pages already in flight (up to concurrency-1) still complete, so the
+  // final slice below enforces the exact cap.
+  let collected = 0;
+  const perPage = await mapWithConcurrency(candidates, serpCfg.concurrency, async (candidate) => {
+    await throttle(new URL(candidate.link).hostname);
 
     let html;
     try {
-      html = await fetchHtml(candidate.link, { fetchImpl, timeoutMs: serpCfg.fetchTimeoutMs });
+      html = await fetchHtml(candidate.link, {
+        fetchImpl,
+        timeoutMs: serpCfg.fetchTimeoutMs,
+        retries: serpCfg.retries,
+        retryBaseDelayMs: serpCfg.retryBaseDelayMs,
+        sleepFn,
+      });
     } catch (err) {
       console.warn(`[serp] Failed to fetch ${candidate.link}: ${err.message}`);
-      continue;
+      return null;
     }
-    if (!html) continue;
+    if (!html) return null;
 
     const date = extractPageDate(html) || candidate.date || null;
     const detectedEdition = detectEdition(date) || edition;
     const event = extractPageTitle(html) || candidate.title || null;
 
-    for (const block of extractPreCodeBlocks(html)) {
-      if (!isValidListBlock(block)) continue;
-      // SERP surfaces multi-faction roundup articles; keep only blocks that
-      // actually mention the requested faction.
-      if (serpCfg.requireFactionMatch && !matchesFaction(block)) continue;
-      results.push({
+    // <pre>/<code> blocks use the base thresholds; body-text segments are
+    // noisier, so they must clear a higher unit count and a unit-per-line
+    // density check that prose fails.
+    const blocks = [
+      ...extractPreCodeBlocks(html).map((text) => ({ text, kind: 'pre' })),
+      ...extractBodyTextBlocks(html).map((text) => ({ text, kind: 'body' })),
+    ];
+    const seenBlockHashes = new Set();
+    const kept = { pre: 0, body: 0 };
+    const entries = [];
+    for (const { text, kind } of blocks) {
+      if (collected >= maxLists) break;
+      const valid = kind === 'pre'
+        ? isValidListBlock(text, thresholds)
+        : isValidListBlock(text, {
+            minUnits: thresholds.bodyMinUnits,
+            minPoints: thresholds.minPoints,
+            minUnitDensity: thresholds.bodyMinUnitDensity,
+          });
+      if (!valid) continue;
+      // Same list can appear twice on a page (nested <pre><code>, or quoted in
+      // the article body) — keep the first copy only.
+      const hash = blockHash(text);
+      if (seenBlockHashes.has(hash)) continue;
+      seenBlockHashes.add(hash);
+      // SERP surfaces multi-faction roundup articles; keep only blocks whose
+      // header mentions the requested faction (a mention further down is
+      // usually matchup commentary about an opponent).
+      if (serpCfg.requireFactionMatch &&
+          !matchesFaction(blockHeader(text, serpCfg.factionMatchWindowLines))) continue;
+      kept[kind]++;
+      collected++;
+      entries.push({
         playerName: null,
         event,
         date,
         record: null,
-        detachment: extractDetachment(block),
-        armyListText: block.slice(0, 10000),
+        detachment: extractDetachment(text),
+        armyListText: text.slice(0, 10000),
         source: 'serp',
         sourceUrl: candidate.link,
         edition: detectedEdition,
         firstSeen: now().toISOString(),
       });
-      if (results.length >= maxLists) break;
     }
-  }
+    if (kept.pre + kept.body > 0) {
+      console.log(`[serp] ${candidate.link}: kept ${kept.pre} pre/code + ${kept.body} body block(s)`);
+    }
+    return entries;
+  }, { shouldStop: () => collected >= maxLists });
 
+  const results = perPage.filter(Boolean).flat().slice(0, maxLists);
   console.log(`[serp] Got ${results.length} entries for ${faction}`);
   return results;
 }

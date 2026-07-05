@@ -3,7 +3,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { normalize, deduplicate, buildOutput } = require('../crawler/merger');
+const { normalize, deduplicate, buildOutput, entriesFromOutput } = require('../crawler/merger');
 
 const sampleEntry = (overrides = {}) => ({
   playerName: 'Test Player',
@@ -75,6 +75,60 @@ test('deduplicate keeps distinct lists', () => {
   const b = sampleEntry({ playerName: 'Bob',   event: 'Event B', date: '2025-09-01', armyListText: 'Detachment: Foetid Virion\nDaemon Prince [165pts]\nBlightlord Terminators [200pts]' });
   const result = deduplicate([a, b]);
   assert.equal(result.length, 2);
+});
+
+test('deduplicate keeps the earliest firstSeen on primary-key collisions', () => {
+  const early = sampleEntry({ firstSeen: '2025-08-01T00:00:00.000Z', armyListText: 'Detachment: Plague Company\nPlague Marines [100pts]' });
+  const late  = sampleEntry({ firstSeen: '2025-09-15T10:00:00.000Z', armyListText: 'Detachment: Plague Company\nPlague Marines [100pts]\nPlague Marines [100pts]\nMore units' });
+  const result = deduplicate([early, late]);
+  assert.equal(result.length, 1);
+  assert.ok(result[0].armyListText.includes('More units'), 'longer text should win');
+  assert.equal(result[0].firstSeen, '2025-08-01T00:00:00.000Z');
+});
+
+test('deduplicate keeps the earliest firstSeen on content-hash collisions', () => {
+  const text = 'Detachment: Plague Company\nPlague Marines [100pts]\nBlightlord Terminators [200pts]\nDaemon Prince [165pts]';
+  const a = sampleEntry({ playerName: 'Alice', event: 'Event A', date: '2025-08-01', firstSeen: '2025-08-01T00:00:00.000Z', armyListText: text });
+  const b = sampleEntry({ playerName: 'Bob',   event: 'Event B', date: '2025-09-20', firstSeen: '2025-09-20T00:00:00.000Z', armyListText: text });
+  const result = deduplicate([b, a]); // later entry first: min must still win
+  assert.equal(result.length, 1);
+  assert.equal(result[0].firstSeen, '2025-08-01T00:00:00.000Z');
+});
+
+test('deduplicate treats whitespace-variant copies of a list as duplicates', () => {
+  const text = 'Detachment: Plague Company\nPlague Marines [100pts]\nBlightlord Terminators [200pts]\nDaemon Prince [165pts]';
+  const spaced = text.replace(/\n/g, '\n\n').replace('Plague Marines', 'Plague  Marines');
+  const a = sampleEntry({ playerName: 'Alice', event: 'Event A', date: '2025-08-01', armyListText: text });
+  const b = sampleEntry({ playerName: 'Bob',   event: 'Event B', date: '2025-09-20', armyListText: spaced });
+  const result = deduplicate([a, b]);
+  assert.equal(result.length, 1);
+});
+
+test('entriesFromOutput round-trips through buildOutput for accumulation', () => {
+  const first = normalize([
+    sampleEntry({ firstSeen: '2025-08-01T00:00:00.000Z' }),
+    sampleEntry({ playerName: 'Bob', event: 'Event B', date: '2025-09-01', armyListText: 'Detachment: Foetid Virion\nDaemon Prince [165pts]\nBlightlord Terminators [200pts]' }),
+  ], '11ed');
+  const output = buildOutput(deduplicate(first), 'Death Guard', '11ed');
+
+  // A later crawl re-finds one existing entry (same page a week later, new
+  // firstSeen) and one genuinely new list.
+  const recrawl = normalize([
+    sampleEntry({ firstSeen: '2025-10-01T00:00:00.000Z' }),
+    sampleEntry({ playerName: 'Carol', event: 'Event C', date: '2025-10-01', armyListText: 'Detachment: Plague Company\nMortarion [325pts]\nPoxwalkers [50pts]' }),
+  ], '11ed');
+  const prior = normalize(entriesFromOutput(output), '11ed');
+  const merged = deduplicate(prior.concat(recrawl));
+
+  assert.equal(merged.length, 3);
+  const dup = merged.find((e) => e.playerName === 'Test Player');
+  assert.equal(dup.firstSeen, '2025-08-01T00:00:00.000Z');
+});
+
+test('entriesFromOutput returns [] for missing or malformed output', () => {
+  assert.deepEqual(entriesFromOutput(null), []);
+  assert.deepEqual(entriesFromOutput({}), []);
+  assert.deepEqual(entriesFromOutput({ sections: {} }), []);
 });
 
 test('buildOutput groups null detachment into Unknown section', () => {
