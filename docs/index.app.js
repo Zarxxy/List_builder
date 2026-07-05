@@ -116,11 +116,21 @@ function clearKey() {
 // deployed and fetchable, otherwise the mock snapshot. isMockData is derived
 // from the context actually used — a failed data fetch falls back to mock and
 // must be labeled as such.
+//
+// Live contexts are memoized: the data file is an immutable deploy asset, so
+// re-fetching and re-parsing it on every Analyze click is pure waste. The mock
+// fallback is deliberately NOT cached — a transient fetch failure must not
+// downgrade the rest of the session to mock data.
+const liveContextCache = new Map();
 async function loadContext(factionKey, edition) {
-  if (factionsWithRealData.has(`${factionKey}:${edition}`)) {
+  const key = `${factionKey}:${edition}`;
+  if (factionsWithRealData.has(key)) {
+    if (liveContextCache.has(key)) return liveContextCache.get(key);
     try {
       const raw = await fetch(`./data/${outputBasename(factionKey, edition)}`).then((r) => r.json());
-      return buildContextFromOutput(raw);
+      const context = buildContextFromOutput(raw);
+      liveContextCache.set(key, context);
+      return context;
     } catch { /* fall through to mock */ }
   }
   return getMockData(factionKey, edition);
