@@ -11,6 +11,8 @@
 const POINTS_UNIT = '(?:pts?|points?)';
 const UNIT_REGEX = new RegExp(`^[•·\\-\\s]*(.+?)\\s*[([]\\s*(\\d+)\\s*${POINTS_UNIT}\\s*[\\])]`, 'gim');
 const ALT_UNIT_REGEX = new RegExp(`^[•·\\-\\s]*(.+?)\\s{2,}\\.{0,}?\\s*(\\d{2,4})\\s*${POINTS_UNIT}\\s*$`, 'gim');
+const DECLARED_TOTAL_REGEX = new RegExp(`total(?:\\s+army)?\\s+points?\\s*[-–:]?\\s*(\\d{3,5})\\s*${POINTS_UNIT}?`, 'i');
+const TITLE_POINTS_REGEX = new RegExp(`[([]\\s*(\\d{3,5})\\s*${POINTS_UNIT}\\s*[\\])]`, 'i');
 
 function parseUnitsFromText(text, maxNameLength) {
   if (!text) return [];
@@ -18,32 +20,24 @@ function parseUnitsFromText(text, maxNameLength) {
   const units = [];
   const seen = new Set();
 
-  UNIT_REGEX.lastIndex = 0;
-  let m;
-  while ((m = UNIT_REGEX.exec(text)) !== null) {
-    const rawName = m[1].trim().replace(/^[x×]\d+\s+/i, '').replace(/\s*[-–:]\s*$/, '');
-    const pts = parseInt(m[2], 10);
-    if (rawName && pts > 0 && rawName.length < cap) {
-      const key = rawName + '|' + pts;
-      if (!seen.has(key)) {
-        seen.add(key);
-        units.push({ name: rawName, points: pts });
+  function collect(regex, cleanName) {
+    regex.lastIndex = 0;
+    let m;
+    while ((m = regex.exec(text)) !== null) {
+      const rawName = cleanName(m[1]);
+      const pts = parseInt(m[2], 10);
+      if (rawName && pts > 0 && rawName.length < cap) {
+        const key = rawName + '|' + pts;
+        if (!seen.has(key)) {
+          seen.add(key);
+          units.push({ name: rawName, points: pts });
+        }
       }
     }
   }
 
-  ALT_UNIT_REGEX.lastIndex = 0;
-  while ((m = ALT_UNIT_REGEX.exec(text)) !== null) {
-    const rawName = m[1].trim().replace(/\.+$/, '').trim();
-    const pts = parseInt(m[2], 10);
-    if (rawName && pts > 0 && rawName.length < cap) {
-      const key = rawName + '|' + pts;
-      if (!seen.has(key)) {
-        seen.add(key);
-        units.push({ name: rawName, points: pts });
-      }
-    }
-  }
+  collect(UNIT_REGEX,     (s) => s.trim().replace(/^[x×]\d+\s+/i, '').replace(/\s*[-–:]\s*$/, ''));
+  collect(ALT_UNIT_REGEX, (s) => s.trim().replace(/\.+$/, '').trim());
 
   return units;
 }
@@ -63,11 +57,19 @@ function extractDetachment(text) {
 // summarizeList can exclude it from unit parsing (it would otherwise be
 // counted as a 2000pt "unit").
 function findDeclaredPoints(text) {
-  let m = text.match(new RegExp(`total(?:\\s+army)?\\s+points?\\s*[-–:]?\\s*(\\d{3,5})\\s*${POINTS_UNIT}?`, 'i'));
-  if (m) return { points: parseInt(m[1], 10), titleLine: null };
   const firstLine = text.split('\n').find((l) => l.trim()) || '';
-  m = firstLine.match(new RegExp(`[([]\\s*(\\d{3,5})\\s*${POINTS_UNIT}\\s*[\\])]`, 'i'));
-  if (m) return { points: parseInt(m[1], 10), titleLine: firstLine };
+  const titleMatch = firstLine.match(TITLE_POINTS_REGEX);
+  const headerMatch = text.match(DECLARED_TOTAL_REGEX);
+  if (headerMatch) {
+    const points = parseInt(headerMatch[1], 10);
+    // A title line restating the declared total (e.g. "My Roster (2000 Points)"
+    // above a "Total Points: 2000" header) is not a unit — report it so
+    // summarizeList excludes it from unit parsing. A first line with a
+    // *different* points value could be a real unit, so it is left alone.
+    const titleLine = titleMatch && parseInt(titleMatch[1], 10) === points ? firstLine : null;
+    return { points, titleLine };
+  }
+  if (titleMatch) return { points: parseInt(titleMatch[1], 10), titleLine: firstLine };
   return null;
 }
 
@@ -110,4 +112,4 @@ function summarizeList(text) {
 }
 
 // Export for Node; the whole line is stripped when inlined into the browser.
-if (typeof module !== 'undefined' && module.exports) { module.exports = { POINTS_UNIT, UNIT_REGEX, ALT_UNIT_REGEX, parseUnitsFromText, extractDetachment, extractDeclaredPoints, summarizeList }; }
+if (typeof module !== 'undefined' && module.exports) { module.exports = { parseUnitsFromText, extractDetachment, extractDeclaredPoints, summarizeList }; }

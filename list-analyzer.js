@@ -1,15 +1,12 @@
 'use strict';
 
 const fs = require('fs');
-const path = require('path');
-const { parseUnitsFromText } = require('./utils');
-const { getMockData } = require('./mock-tournament-data');
+const { outputFileFor } = require('./utils');
+const { getMockData } = require('./shared/mock-data');
 const { SUPPORTED_FACTIONS } = require('./shared/factions');
 const { buildSystemText, buildUserMessage, extractJSON } = require('./shared/prompt');
-
-const config = JSON.parse(fs.readFileSync(path.join(__dirname, 'config.json'), 'utf-8'));
-const DEFAULT_MODEL = (config.aiAnalysis && config.aiAnalysis.defaultModel) || 'claude-sonnet-4-6';
-const MAX_TOKENS = (config.aiAnalysis && config.aiAnalysis.maxTokens) || 2000;
+const { buildContextFromOutput } = require('./shared/tournament-context');
+const { DEFAULT_MODEL, MAX_TOKENS } = require('./config');
 
 function normalizeListText(raw) {
   return raw
@@ -19,51 +16,9 @@ function normalizeListText(raw) {
     .replace(/[“”]/g, '"');
 }
 
-function buildContextFromOutput(raw) {
-  const meta = {
-    faction: raw.faction,
-    totalLists: raw.totalLists || 0,
-    crawledAt: raw.crawledAt,
-    edition: raw.edition,
-    sources: raw.sources || {},
-  };
-
-  const detachmentBreakdown = Object.keys(raw.sections || {})
-    .filter((k) => k !== 'All' && k !== 'Unknown')
-    .map((det) => ({
-      detachment: det,
-      count: raw.sections[det].length,
-      percentage: ((raw.sections[det].length / (raw.totalLists || 1)) * 100).toFixed(1),
-    }))
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 6);
-
-  const topUnitsByDetachment = {};
-  for (const det of detachmentBreakdown) {
-    const entries = raw.sections[det.detachment] || [];
-    const tally = {};
-    for (const entry of entries) {
-      const units = parseUnitsFromText(entry.armyListText || '');
-      for (const u of units) {
-        tally[u.name] = (tally[u.name] || 0) + 1;
-      }
-    }
-    topUnitsByDetachment[det.detachment] = Object.entries(tally)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 10)
-      .map(([name, count]) => ({
-        name,
-        count,
-        frequency: ((count / (entries.length || 1)) * 100).toFixed(1),
-      }));
-  }
-
-  return { meta, detachmentBreakdown, topUnitsByDetachment, sources: raw.sources || {}, isMockData: false, edition: raw.edition };
-}
-
 function loadTournamentContext(faction, edition) {
   const ed = edition || '11ed';
-  const file = path.join(__dirname, 'output', `army-lists-${faction}-${ed}-latest.json`);
+  const file = outputFileFor(faction, ed);
   if (fs.existsSync(file)) {
     try {
       const raw = JSON.parse(fs.readFileSync(file, 'utf-8'));
@@ -133,10 +88,7 @@ async function analyzeList({ listText, faction, edition, apiKey, model }) {
 module.exports = {
   analyzeList,
   loadTournamentContext,
-  buildContextFromOutput,
   buildSystemBlocks,
-  buildUserMessage,
-  extractJSON,
   normalizeListText,
   SUPPORTED_FACTIONS,
   DEFAULT_MODEL,

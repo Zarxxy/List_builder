@@ -1,9 +1,9 @@
 'use strict';
 
 // Single source of truth for the synthetic "meta snapshot" fallback data.
-// Consumed by Node (via mock-tournament-data.js re-export) and inlined into the
-// static docs page by build-pages.js. Previously this existed in two places
-// (this file + a trimmed, drifted copy inside docs/index.html).
+// Consumed by Node (list-analyzer.js) and inlined into the static docs page by
+// build-pages.js. Previously this existed in two places (this file + a
+// trimmed, drifted copy inside docs/index.html).
 const MOCK_DATA = {
   'death-guard-11ed': {
     note: 'Approximate 11th Edition meta — update when official data is crawled',

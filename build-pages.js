@@ -2,6 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { DEFAULT_MODEL: MODEL_ID, MAX_TOKENS } = require('./config');
 
 const rootDir   = __dirname;
 const outputDir = path.join(rootDir, 'output');
@@ -9,16 +10,12 @@ const docsDir   = path.join(rootDir, 'docs');
 const dataDir   = path.join(docsDir, 'data');
 const sharedDir = path.join(rootDir, 'shared');
 
-const config = JSON.parse(fs.readFileSync(path.join(rootDir, 'config.json'), 'utf-8'));
-const MODEL_ID   = (config.aiAnalysis && config.aiAnalysis.defaultModel) || 'claude-sonnet-4-6';
-const MAX_TOKENS = (config.aiAnalysis && config.aiAnalysis.maxTokens) || 2000;
-
-// Read a shared CommonJS module and strip the Node-only lines (require(),
+// Read a CommonJS source file and strip the Node-only lines (require(),
 // module.exports guard, redundant 'use strict') so the remaining source can be
-// inlined into the browser page as plain script-scope declarations.
-function inlineModule(file) {
-  const src = fs.readFileSync(path.join(sharedDir, file), 'utf-8');
-  return src
+// inlined into the browser page as plain script-scope declarations. Used for
+// both the shared/ modules and the docs page script.
+function stripNodeLines(absPath) {
+  return fs.readFileSync(absPath, 'utf-8')
     .split('\n')
     .filter((line) => {
       if (/^'use strict';\s*$/.test(line)) return false;
@@ -31,12 +28,19 @@ function inlineModule(file) {
 }
 
 // Dependency order matters: factions before prompt (prompt references
-// SUPPORTED_FACTIONS), format before list-summary (renderListSummaryHtml uses
-// esc), and getMockData/format before the UI code that uses them.
+// SUPPORTED_FACTIONS), format before list-summary/prompt (they use esc /
+// editionLabel / dataSourceLine), list-summary before tournament-context
+// (which uses parseUnitsFromText). The prelude turns config.json values into
+// script-scope consts (MODEL_ID, MAX_TOKENS) the page script references.
 function buildSharedBundle() {
-  return ['factions.js', 'mock-data.js', 'format.js', 'list-summary.js', 'prompt.js']
-    .map((f) => `// ── shared/${f} ──\n${inlineModule(f)}`)
-    .join('\n\n');
+  const prelude = [
+    '// ── build config (from config.json via build-pages.js) ──',
+    `const MODEL_ID = ${JSON.stringify(MODEL_ID)};`,
+    `const MAX_TOKENS = ${JSON.stringify(MAX_TOKENS)};`,
+  ].join('\n');
+  const modules = ['factions.js', 'mock-data.js', 'format.js', 'list-summary.js', 'tournament-context.js', 'prompt.js']
+    .map((f) => `// ── shared/${f} ──\n${stripNodeLines(path.join(sharedDir, f))}`);
+  return [prelude, ...modules].join('\n\n');
 }
 
 // Pure: produce the docs/index.html contents (no disk write) so it can be tested.
@@ -45,14 +49,14 @@ function renderIndexHtml() {
   // Function replacers so `$` sequences in the inlined code (e.g. template
   // literals) are never interpreted as String.replace special patterns.
   return template
+    .replace('/*SHARED_STYLES*/', () => fs.readFileSync(path.join(sharedDir, 'styles.css'), 'utf-8').trim())
     .replace('<!--SHARED_MODULES-->', () => buildSharedBundle())
-    .replace('__MODEL_ID__', () => MODEL_ID)
-    .replace('__MAX_TOKENS__', () => String(MAX_TOKENS));
+    .replace('<!--PAGE_SCRIPT-->', () => stripNodeLines(path.join(docsDir, 'index.app.js')));
 }
 
 function generateIndexHtml() {
   fs.writeFileSync(path.join(docsDir, 'index.html'), renderIndexHtml());
-  console.log('Generated docs/index.html from template + shared/ modules');
+  console.log('Generated docs/index.html from template + shared/ modules + docs/index.app.js');
 }
 
 function copyData() {

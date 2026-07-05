@@ -1,7 +1,7 @@
 'use strict';
 
 // Shared HTML/list-parsing helpers for the fetch-based crawler.
-const config = require('../../config.json');
+const { config } = require('../../config');
 const { parseUnitsFromText } = require('../../utils');
 
 const EDITION_CUTOFF = new Date(config.crawler.editionCutoffDate || '2025-08-01');
@@ -79,12 +79,8 @@ function extractPageTitle(html) {
 }
 
 module.exports = {
-  EDITION_CUTOFF,
-  MIN_UNITS,
-  MIN_POINTS,
   detectEdition,
   sleep,
-  extractTextFromHtml,
   extractPreCodeBlocks,
   isValidListBlock,
   fetchHtml,

@@ -5,8 +5,19 @@ const nodeGlobals = {
   process: 'readonly', console: 'readonly', Buffer: 'readonly', global: 'readonly',
   setTimeout: 'readonly', clearTimeout: 'readonly', setInterval: 'readonly', clearInterval: 'readonly',
   fetch: 'readonly', AbortController: 'readonly', AbortSignal: 'readonly', URLSearchParams: 'readonly', URL: 'readonly',
-  // DOM globals used inside crawler/sources/listhammer.js + tabletop-to.js page.evaluate() callbacks
-  document: 'readonly', window: 'readonly', navigator: 'readonly',
+};
+
+const browserGlobals = {
+  document: 'readonly', window: 'readonly', navigator: 'readonly', console: 'readonly',
+  fetch: 'readonly', sessionStorage: 'readonly',
+  setTimeout: 'readonly', clearTimeout: 'readonly', AbortController: 'readonly',
+};
+
+// One lint policy for the whole repo; blocks below only vary languageOptions.
+const sharedRules = {
+  'no-unused-vars': 'warn',
+  'eqeqeq': 'error',
+  'no-empty': ['error', { allowEmptyCatch: true }],
 };
 
 export default [
@@ -15,12 +26,19 @@ export default [
     files: ['**/*.js'],
     languageOptions: { ecmaVersion: 2022, sourceType: 'commonjs', globals: nodeGlobals },
     rules: {
-      'no-unused-vars': 'warn',
-      'eqeqeq': 'error',
+      ...sharedRules,
       'no-console': 'off',
-      'no-empty': ['error', { allowEmptyCatch: true }],
       'no-irregular-whitespace': ['error', { skipRegExps: true }],
     },
+  },
+  {
+    // Browser page scripts (public/app.js is served as-is; docs/index.app.js
+    // is inlined into the generated docs page by build-pages.js). The base
+    // block above already applies the rules; this only swaps in browser
+    // globals. Shared helpers arrive as script-scope globals — declared via
+    // /* global */ comments at the top of each file.
+    files: ['public/app.js', 'docs/index.app.js'],
+    languageOptions: { ecmaVersion: 2022, sourceType: 'script', globals: browserGlobals },
   },
   {
     // Playwright e2e tests are ES modules and reference browser globals inside
@@ -29,15 +47,11 @@ export default [
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: 'module',
-      globals: { ...nodeGlobals, sessionStorage: 'readonly' },
+      globals: { ...nodeGlobals, ...browserGlobals },
     },
-    rules: {
-      'no-unused-vars': 'warn',
-      'eqeqeq': 'error',
-      'no-empty': ['error', { allowEmptyCatch: true }],
-    },
+    rules: sharedRules,
   },
   {
-    ignores: ['node_modules/', 'output/', 'public/', 'docs/'],
+    ignores: ['node_modules/', 'output/', 'docs/index.html'],
   },
 ];

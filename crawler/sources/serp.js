@@ -11,8 +11,10 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { extractDetachment } = require('../../utils');
-const config = require('../../config.json');
+const { extractDetachment, OUTPUT_DIR } = require('../../utils');
+const { factionToKey } = require('../../shared/factions');
+const { editionLabel } = require('../../shared/format');
+const { config } = require('../../config');
 const {
   detectEdition, sleep, extractPreCodeBlocks, isValidListBlock,
   fetchHtml, extractPageDate, extractPageTitle,
@@ -20,7 +22,6 @@ const {
 
 const CACHE_TTL_DAYS = config.crawler.serpCacheTTLDays || 7;
 const CACHE_VERSION = 2;
-const OUTPUT_DIR = path.join(__dirname, '..', '..', 'output');
 
 const SERP_DEFAULTS = {
   maxQueries: 4,
@@ -41,9 +42,8 @@ function serpConfig() {
 // then optional extra result pages of the generic query — truncated to
 // maxQueries so config alone bounds the API spend.
 function buildQueries(faction, edition, serpCfg = serpConfig()) {
-  const editionLabel = edition === '11ed' ? '11th Edition' : '10th Edition';
   const num = serpCfg.resultsPerQuery;
-  const generic = `"${faction}" tournament army list warhammer 40k "${editionLabel}"`;
+  const generic = `"${faction}" tournament army list warhammer 40k "${editionLabel(edition)}"`;
 
   const specs = [{ q: generic, num, start: 0 }];
   for (const domain of serpCfg.siteTargets) {
@@ -121,8 +121,7 @@ async function fetchLists(faction, edition, opts = {}) {
   }
 
   fs.mkdirSync(cacheDir, { recursive: true });
-  const factionKey = faction.replace(/\s+/g, '-').toLowerCase();
-  const cacheFile = path.join(cacheDir, `serp-cache-${factionKey}-${edition}.json`);
+  const cacheFile = path.join(cacheDir, `serp-cache-${factionToKey(faction)}-${edition}.json`);
   const cache = loadCache(cacheFile);
 
   // --- Search phase: one SerpAPI call per uncached query spec ---

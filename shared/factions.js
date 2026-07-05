@@ -1,9 +1,10 @@
 'use strict';
 
 // Single source of truth for the supported faction list. Consumed directly by
-// Node (list-analyzer.js, mock-tournament-data.js) and inlined into the static
-// docs page by build-pages.js. Keep this list in sync with config.json's
-// factionPatterns and the crawl-deploy.yml workflow choices.
+// Node (list-analyzer.js, crawler) and inlined into the static docs page by
+// build-pages.js. This list must stay in sync with config.json's
+// factionPatterns and the crawl-deploy.yml workflow choices — guarded by the
+// sync tests in tests/test-shared.js.
 const SUPPORTED_FACTIONS = [
   { key: 'death-guard',         label: 'Death Guard' },
   { key: 'space-marines',       label: 'Space Marines' },
@@ -33,5 +34,12 @@ const SUPPORTED_FACTIONS = [
   { key: 'genestealer-cults',   label: 'Genestealer Cults' },
 ];
 
+// Canonical faction label → key conversion ("T'au Empire" → "tau-empire").
+// The output must match the `key` fields above; the crawler uses it to name
+// output/cache files that the server and docs page look up by key.
+function factionToKey(label) {
+  return label.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+}
+
 // Export for Node; the whole line is stripped when inlined into the browser.
-if (typeof module !== 'undefined' && module.exports) { module.exports = { SUPPORTED_FACTIONS }; }
+if (typeof module !== 'undefined' && module.exports) { module.exports = { SUPPORTED_FACTIONS, factionToKey }; }

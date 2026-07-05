@@ -5,6 +5,7 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const { analyzeList, SUPPORTED_FACTIONS, DEFAULT_MODEL } = require('./list-analyzer');
+const { outputFileFor } = require('./utils');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -12,8 +13,7 @@ const PORT = process.env.PORT || 3000;
 if (process.env.TRUST_PROXY === '1') app.set('trust proxy', 1);
 
 function getListCount(factionKey, edition) {
-  const file = path.join(__dirname, 'output', `army-lists-${factionKey}-${edition}-latest.json`);
-  try { return JSON.parse(fs.readFileSync(file, 'utf-8')).totalLists || 0; }
+  try { return JSON.parse(fs.readFileSync(outputFileFor(factionKey, edition), 'utf-8')).totalLists || 0; }
   catch { return 0; }
 }
 
@@ -47,11 +47,11 @@ function rateLimit(req, res, next) {
   const now = Date.now();
   const entry = rateLimitMap.get(ip) || { count: 0, resetAt: now + 60000 };
   if (now > entry.resetAt) { entry.count = 0; entry.resetAt = now + 60000; }
-  if (++entry.count > 10) {
-    rateLimitMap.set(ip, entry);
+  entry.count++;
+  rateLimitMap.set(ip, entry);
+  if (entry.count > 10) {
     return res.status(429).json({ error: 'Too many requests. Please wait a minute.' });
   }
-  rateLimitMap.set(ip, entry);
   next();
 }
 

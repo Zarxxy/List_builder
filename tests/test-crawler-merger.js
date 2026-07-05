@@ -12,8 +12,8 @@ const sampleEntry = (overrides = {}) => ({
   record: '4-2-0',
   detachment: null,
   armyListText: 'Detachment: Plague Company\nPlague Marines [100pts]\nPlague Marines [100pts]\nPlague Marines [100pts]',
-  source: 'listhammer',
-  sourceUrl: 'https://listhammer.info/test',
+  source: 'serp',
+  sourceUrl: 'https://example.com/test',
   edition: '11ed',
   firstSeen: '2025-09-15T10:00:00.000Z',
   ...overrides,
@@ -38,16 +38,9 @@ test('normalize preserves existing detachment', () => {
   assert.equal(result[0].detachment, 'Foetid Virion');
 });
 
-test('normalize sets edition from default when missing', () => {
-  const entries = [sampleEntry({ edition: null })];
-  const result = normalize(entries, '11ed');
-  assert.equal(result[0].edition, '11ed');
-});
-
-test('normalize sets edition from 10ed default', () => {
-  const entries = [sampleEntry({ edition: '' })];
-  const result = normalize(entries, '10ed');
-  assert.equal(result[0].edition, '10ed');
+test('normalize falls back to the default edition when missing/empty', () => {
+  assert.equal(normalize([sampleEntry({ edition: null })], '11ed')[0].edition, '11ed');
+  assert.equal(normalize([sampleEntry({ edition: '' })], '10ed')[0].edition, '10ed');
 });
 
 test('deduplicate by primary key keeps longer armyListText', () => {
@@ -118,11 +111,11 @@ test('buildOutput has correct shape', () => {
 
 test('buildOutput counts sources correctly', () => {
   const entries = [
-    sampleEntry({ source: 'listhammer' }),
-    sampleEntry({ source: 'listhammer', playerName: 'Bob', event: 'B', date: '2025-10-01', armyListText: 'Detachment: Plague Company\nPlague Marines [100pts]\nExtra units here and more' }),
-    sampleEntry({ source: 'goonhammer', playerName: 'Carol', event: 'C', date: '2025-11-01', armyListText: 'Detachment: Plague Company\nPlague Marines [100pts]\nGoonhammer source unique text here' }),
+    sampleEntry({ source: 'source-a' }),
+    sampleEntry({ source: 'source-a', playerName: 'Bob', event: 'B', date: '2025-10-01', armyListText: 'Detachment: Plague Company\nPlague Marines [100pts]\nExtra units here and more' }),
+    sampleEntry({ source: 'source-b', playerName: 'Carol', event: 'C', date: '2025-11-01', armyListText: 'Detachment: Plague Company\nPlague Marines [100pts]\nSecond source unique text here' }),
   ];
   const output = buildOutput(normalize(entries, '11ed'), 'Death Guard', '11ed');
-  assert.ok(output.sources.listhammer >= 1);
-  assert.ok(output.sources.goonhammer >= 1);
+  assert.ok(output.sources['source-a'] >= 1);
+  assert.ok(output.sources['source-b'] >= 1);
 });

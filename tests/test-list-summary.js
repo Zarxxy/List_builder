@@ -5,35 +5,7 @@ const assert = require('node:assert/strict');
 
 const { summarizeList, extractDeclaredPoints } = require('../shared/list-summary');
 const { renderListSummaryHtml } = require('../shared/format');
-
-const GW_APP_LIST = `+ FACTION KEYWORD: Chaos - Death Guard +
-+ DETACHMENT: Plague Company +
-+ TOTAL ARMY POINTS: 2000pts +
-
-CHARACTERS
-
-Typhus (100 Points)
-  • 1x Master of the Plague Company
-
-Lord of Virulence (80 Points)
-
-BATTLELINE
-
-Plague Marines (100 Points)
-  • 4x Plague Marine
-
-OTHER DATASHEETS
-
-Deathshroud Terminators (110 Points)
-Blightlord Terminators (200 Points)
-Foul Blightspawn (55 Points)`;
-
-const BRACKET_PTS_LIST = `Detachment: Plague Company
-Plague Marines [100pts]
-Typhus [100pts]
-Deathshroud Terminators [110pts]
-Blightlord Terminators [200pts]
-Foul Blightspawn [55pts]`;
+const { GW_APP_LIST, BRACKET_PTS_LIST } = require('./fixtures');
 
 // ── extractDeclaredPoints ────────────────────────────────────────────────────
 test('extractDeclaredPoints reads the GW app "TOTAL ARMY POINTS" header', () => {
@@ -96,6 +68,19 @@ test('summarizeList does not count a GW-app title line "(2000 points)" as a unit
   assert.equal(s.declaredPoints, 2000);
   assert.equal(s.unitCount, 2);
   assert.equal(s.totalPoints, 385);
+});
+
+test('summarizeList excludes the title line even when a Total Points header also matches', () => {
+  const s = summarizeList('My Roster (2000 Points)\nTotal Points: 2000\nDetachment: Plague Company\nPlague Marines (100 Points)');
+  assert.equal(s.declaredPoints, 2000);
+  assert.equal(s.unitCount, 1);
+  assert.equal(s.totalPoints, 100);
+});
+
+test('summarizeList keeps a first-line unit whose points differ from the declared total', () => {
+  const s = summarizeList('Typhus (100 Points)\nTotal Points: 2000\nPlague Marines (100 Points)');
+  assert.equal(s.declaredPoints, 2000);
+  assert.equal(s.unitCount, 2);
 });
 
 test('summarizeList warns above 2000pts when no total is declared', () => {
