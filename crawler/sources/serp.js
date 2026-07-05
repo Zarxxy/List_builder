@@ -20,6 +20,7 @@ const {
   extractBodyTextBlocks, isValidListBlock,
   fetchHtml, extractPageDate, extractPageTitle,
 } = require('../lib/html');
+const { fetchWithRetry, mapWithConcurrency, makeDomainThrottle } = require('../lib/net');
 
 const CACHE_TTL_DAYS = config.crawler.serpCacheTTLDays || 7;
 const CACHE_VERSION = 2;
@@ -34,6 +35,10 @@ const SERP_DEFAULTS = {
   requireFactionMatch: true,
   factionMatchWindowLines: 10,
   fetchTimeoutMs: 15000,
+  concurrency: 3,
+  retries: 2,
+  retryBaseDelayMs: 500,
+  perDomainDelayMs: 500,
 };
 
 function serpConfig() {
@@ -125,7 +130,8 @@ async function fetchLists(faction, edition, opts = {}) {
     fetchImpl = fetch,
     cacheDir = OUTPUT_DIR,
     now = () => new Date(),
-    sleepMs = 500,
+    sleepMs,   // overrides serpCfg.perDomainDelayMs (tests pass 0)
+    sleepFn = sleep,
   } = opts;
   const serpCfg = serpConfig();
 
@@ -165,9 +171,9 @@ async function fetchLists(faction, edition, opts = {}) {
     if (spec.start > 0) params.set('start', String(spec.start));
     console.log(`[serp] Querying SerpAPI: ${spec.q}`);
     try {
-      const res = await fetchImpl(`https://serpapi.com/search.json?${params}`, {
+      const res = await fetchWithRetry(`https://serpapi.com/search.json?${params}`, () => ({
         signal: AbortSignal.timeout(serpCfg.fetchTimeoutMs),
-      });
+      }), { fetchImpl, retries: serpCfg.retries, baseDelayMs: serpCfg.retryBaseDelayMs, sleepFn });
       if (!res.ok) throw new Error(`SerpAPI responded with HTTP ${res.status}`);
       const data = await res.json();
       if (data.error) throw new Error(`SerpAPI error: ${data.error}`);
@@ -194,20 +200,31 @@ async function fetchLists(faction, edition, opts = {}) {
 
   const matchesFaction = factionMatcher(faction);
   const thresholds = validationConfig();
-  const results = [];
+  const throttle = makeDomainThrottle(
+    sleepMs !== undefined ? sleepMs : serpCfg.perDomainDelayMs, { sleepFn });
 
-  for (const candidate of candidates) {
-    if (results.length >= maxLists) break;
-    if (sleepMs > 0) await sleep(sleepMs);
+  // Bounded-concurrency fetch of the candidate pages, throttled per domain.
+  // `collected` stops NEW pages being scheduled once maxLists is reached;
+  // pages already in flight (up to concurrency-1) still complete, so the
+  // final slice below enforces the exact cap.
+  let collected = 0;
+  const perPage = await mapWithConcurrency(candidates, serpCfg.concurrency, async (candidate) => {
+    await throttle(new URL(candidate.link).hostname);
 
     let html;
     try {
-      html = await fetchHtml(candidate.link, { fetchImpl, timeoutMs: serpCfg.fetchTimeoutMs });
+      html = await fetchHtml(candidate.link, {
+        fetchImpl,
+        timeoutMs: serpCfg.fetchTimeoutMs,
+        retries: serpCfg.retries,
+        retryBaseDelayMs: serpCfg.retryBaseDelayMs,
+        sleepFn,
+      });
     } catch (err) {
       console.warn(`[serp] Failed to fetch ${candidate.link}: ${err.message}`);
-      continue;
+      return null;
     }
-    if (!html) continue;
+    if (!html) return null;
 
     const date = extractPageDate(html) || candidate.date || null;
     const detectedEdition = detectEdition(date) || edition;
@@ -222,7 +239,9 @@ async function fetchLists(faction, edition, opts = {}) {
     ];
     const seenBlockHashes = new Set();
     const kept = { pre: 0, body: 0 };
+    const entries = [];
     for (const { text, kind } of blocks) {
+      if (collected >= maxLists) break;
       const valid = kind === 'pre'
         ? isValidListBlock(text, thresholds)
         : isValidListBlock(text, {
@@ -242,7 +261,8 @@ async function fetchLists(faction, edition, opts = {}) {
       if (serpCfg.requireFactionMatch &&
           !matchesFaction(blockHeader(text, serpCfg.factionMatchWindowLines))) continue;
       kept[kind]++;
-      results.push({
+      collected++;
+      entries.push({
         playerName: null,
         event,
         date,
@@ -254,13 +274,14 @@ async function fetchLists(faction, edition, opts = {}) {
         edition: detectedEdition,
         firstSeen: now().toISOString(),
       });
-      if (results.length >= maxLists) break;
     }
     if (kept.pre + kept.body > 0) {
       console.log(`[serp] ${candidate.link}: kept ${kept.pre} pre/code + ${kept.body} body block(s)`);
     }
-  }
+    return entries;
+  }, { shouldStop: () => collected >= maxLists });
 
+  const results = perPage.filter(Boolean).flat().slice(0, maxLists);
   console.log(`[serp] Got ${results.length} entries for ${faction}`);
   return results;
 }

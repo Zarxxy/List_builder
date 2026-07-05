@@ -202,7 +202,9 @@ test('fetchLists never logs the API key on SerpAPI failures', async () => {
   const origWarn = console.warn;
   console.warn = (...args) => warnings.push(args.join(' '));
   try {
-    const result = await fetchLists('Death Guard', '11ed', { fetchImpl, cacheDir: makeCacheDir(), sleepMs: 0 });
+    // sleepFn stubbed: every query fails and gets retried, so real backoff
+    // sleeps would slow the test down.
+    const result = await fetchLists('Death Guard', '11ed', { fetchImpl, cacheDir: makeCacheDir(), sleepMs: 0, sleepFn: async () => {} });
     assert.deepEqual(result, []);
   } finally {
     console.warn = origWarn;
@@ -235,6 +237,48 @@ test('fetchLists discards v1-format cache files and re-queries', async () => {
   const result = await fetchLists('Death Guard', '11ed', { fetchImpl, cacheDir, sleepMs: 0 });
   assert.ok(calls.serp > 0, 'expected fresh SerpAPI queries despite v1 cache file');
   assert.equal(result.length, 2);
+});
+
+// --- retry & concurrency ---
+
+test('fetchLists retries a transient SerpAPI 500 and still extracts results', async () => {
+  let serpCalls = 0;
+  const fetchImpl = async (url) => {
+    if (url.startsWith('https://serpapi.com/')) {
+      serpCalls++;
+      if (serpCalls === 1) return { ok: false, status: 500, headers: { get: () => null }, json: async () => ({}), text: async () => '' };
+      return mockResponse(SERP_FIXTURE, { json: true });
+    }
+    if (url === 'https://example.com/article-one') return mockResponse(ARTICLE_ONE_HTML);
+    if (url === 'https://example.com/article-two') return mockResponse(ARTICLE_TWO_HTML);
+    return mockResponse('short');
+  };
+  const result = await fetchLists('Death Guard', '11ed', {
+    fetchImpl, cacheDir: makeCacheDir(), sleepMs: 0, sleepFn: async () => {},
+  });
+  assert.ok(serpCalls > 3, 'expected a retry beyond the 3 query specs');
+  assert.equal(result.length, 2);
+});
+
+test('fetchLists fetches content pages concurrently but within the configured limit', async () => {
+  const links = ['a', 'b', 'c', 'd', 'e', 'f'].map((p) => ({
+    link: `https://site-${p}.test/page`, title: p, snippet: p, date: null,
+  }));
+  let inFlight = 0;
+  let peak = 0;
+  const fetchImpl = async (url) => {
+    if (url.startsWith('https://serpapi.com/')) {
+      return mockResponse({ organic_results: links }, { json: true });
+    }
+    inFlight++;
+    peak = Math.max(peak, inFlight);
+    await new Promise((r) => setTimeout(r, 10));
+    inFlight--;
+    return mockResponse('short');
+  };
+  await fetchLists('Death Guard', '11ed', { fetchImpl, cacheDir: makeCacheDir(), sleepMs: 0 });
+  assert.ok(peak <= 3, `content fetch concurrency exceeded limit: ${peak}`);
+  assert.ok(peak >= 2, `expected concurrent fetches, saw peak ${peak}`);
 });
 
 // --- body-text extraction ---

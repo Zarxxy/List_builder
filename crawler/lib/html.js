@@ -3,6 +3,7 @@
 // Shared HTML/list-parsing helpers for the fetch-based crawler.
 const { config } = require('../../config');
 const { parseUnitsFromText } = require('../../utils');
+const { fetchWithRetry } = require('./net');
 
 const EDITION_CUTOFF = new Date(config.crawler.editionCutoffDate || '2025-08-01');
 
@@ -101,15 +102,18 @@ function isValidListBlock(text, { minUnits = 5, minPoints = 500, minUnitDensity 
 }
 
 // Fetch a content page and return its HTML, or null when the response is
-// unusable (PDF, tiny page). Throws on network errors/timeouts.
-async function fetchHtml(url, { fetchImpl = fetch, timeoutMs = 15000 } = {}) {
-  const res = await fetchImpl(url, {
+// unusable (PDF, tiny page). Throws on network errors/timeouts (after
+// exhausting `retries` extra attempts; default 0 = single attempt).
+async function fetchHtml(url, {
+  fetchImpl = fetch, timeoutMs = 15000, retries = 0, retryBaseDelayMs = 500, sleepFn = sleep,
+} = {}) {
+  const res = await fetchWithRetry(url, () => ({
     headers: {
       'User-Agent': 'Mozilla/5.0 (compatible; wh40k-list-analyzer/1.0)',
       'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
     },
     signal: AbortSignal.timeout(timeoutMs),
-  });
+  }), { fetchImpl, retries, baseDelayMs: retryBaseDelayMs, sleepFn });
   const ct = res.headers.get('content-type') || '';
   if (ct.includes('application/pdf')) return null;
   const text = await res.text();
