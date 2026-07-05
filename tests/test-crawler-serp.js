@@ -237,6 +237,70 @@ test('fetchLists discards v1-format cache files and re-queries', async () => {
   assert.equal(result.length, 2);
 });
 
+// --- body-text extraction ---
+
+// ≥8 units (bodyMinUnits) with the faction on line 1 so the block passes both
+// the stricter body thresholds and the faction match.
+const LONG_DG_LIST = [
+  'Death Guard — Detachment: Plague Company',
+  'Typhus [80pts]',
+  'Plague Marines [100pts]',
+  'Blightlord Terminators [200pts]',
+  'Predator Annihilator [130pts]',
+  'Plagueburst Crawler [160pts]',
+  'Deathshroud Terminators [110pts]',
+  'Foul Blightspawn [60pts]',
+  'Myphitic Blight-hauler [90pts]',
+].join('\n');
+
+// One-page SERP fixture + fetchImpl for a given HTML body.
+function makePageFetchImpl(html) {
+  const url = 'https://example.com/article';
+  const fetchImpl = async (u) => {
+    if (u.startsWith('https://serpapi.com/')) {
+      return mockResponse({ organic_results: [{ link: url, title: 'Article (SERP)', snippet: 's', date: '2025-09-15' }] }, { json: true });
+    }
+    return mockResponse(html);
+  };
+  return fetchImpl;
+}
+
+test('fetchLists extracts lists from article body text (no <pre>/<code>)', async () => {
+  const html = `<html><head><title>Body Only GT Report</title></head><body>
+    <h2>The list</h2>
+    <p>${LONG_DG_LIST.split('\n').join('<br>')}</p>
+    ${FILLER}</body></html>`;
+  const result = await fetchLists('Death Guard', '11ed', {
+    fetchImpl: makePageFetchImpl(html), cacheDir: makeCacheDir(), sleepMs: 0,
+  });
+  assert.equal(result.length, 1);
+  assert.equal(result[0].event, 'Body Only GT Report');
+  assert.ok(result[0].armyListText.includes('Myphitic Blight-hauler'));
+  assert.equal(result[0].detachment, 'Plague Company');
+});
+
+test('fetchLists keeps one copy when the same list appears in <pre> and body text', async () => {
+  const html = `<html><head><title>Duplicated List Page</title></head><body>
+    <pre>${LONG_DG_LIST}</pre>
+    <p>${LONG_DG_LIST.split('\n').join('<br>')}</p>
+    ${FILLER}</body></html>`;
+  const result = await fetchLists('Death Guard', '11ed', {
+    fetchImpl: makePageFetchImpl(html), cacheDir: makeCacheDir(), sleepMs: 0,
+  });
+  assert.equal(result.length, 1);
+});
+
+test('fetchLists ignores body prose that fails the density check', async () => {
+  const prose = Array.from({ length: 40 }, (_, i) => `Turn commentary line ${i} about positioning and secondaries.`).join('<br>');
+  const html = `<html><head><title>Prose Report</title></head><body>
+    <p>Death Guard did well this weekend.<br>${prose}<br>${LONG_DG_LIST.split('\n').slice(1).join('<br>')}</p>
+    ${FILLER}</body></html>`;
+  const result = await fetchLists('Death Guard', '11ed', {
+    fetchImpl: makePageFetchImpl(html), cacheDir: makeCacheDir(), sleepMs: 0,
+  });
+  assert.deepEqual(result, []);
+});
+
 test('fetchLists expires cache entries past the TTL', async () => {
   const cacheDir = makeCacheDir();
   const first = makeFetchImpl();

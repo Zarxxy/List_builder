@@ -16,7 +16,8 @@ const { factionToKey } = require('../../shared/factions');
 const { editionLabel } = require('../../shared/format');
 const { config } = require('../../config');
 const {
-  detectEdition, sleep, extractPreCodeBlocks, isValidListBlock,
+  detectEdition, sleep, validationConfig, extractPreCodeBlocks,
+  extractBodyTextBlocks, isValidListBlock,
   fetchHtml, extractPageDate, extractPageTitle,
 } = require('../lib/html');
 
@@ -95,6 +96,12 @@ function dedupeSerpResults(results, serpCfg = serpConfig()) {
     if (out.length >= serpCfg.maxUrlFetches) break;
   }
   return out;
+}
+
+// Whitespace-insensitive hash for spotting the same list twice on one page.
+function blockHash(text) {
+  const normalized = (text || '').toLowerCase().replace(/\s+/g, ' ').slice(0, 500);
+  return crypto.createHash('sha256').update(normalized).digest('hex');
 }
 
 function factionMatcher(faction) {
@@ -178,6 +185,7 @@ async function fetchLists(faction, edition, opts = {}) {
   console.log(`[serp] Processing ${candidates.length} result URLs`);
 
   const matchesFaction = factionMatcher(faction);
+  const thresholds = validationConfig();
   const results = [];
 
   for (const candidate of candidates) {
@@ -197,24 +205,49 @@ async function fetchLists(faction, edition, opts = {}) {
     const detectedEdition = detectEdition(date) || edition;
     const event = extractPageTitle(html) || candidate.title || null;
 
-    for (const block of extractPreCodeBlocks(html)) {
-      if (!isValidListBlock(block)) continue;
+    // <pre>/<code> blocks use the base thresholds; body-text segments are
+    // noisier, so they must clear a higher unit count and a unit-per-line
+    // density check that prose fails.
+    const blocks = [
+      ...extractPreCodeBlocks(html).map((text) => ({ text, kind: 'pre' })),
+      ...extractBodyTextBlocks(html).map((text) => ({ text, kind: 'body' })),
+    ];
+    const seenBlockHashes = new Set();
+    const kept = { pre: 0, body: 0 };
+    for (const { text, kind } of blocks) {
+      const valid = kind === 'pre'
+        ? isValidListBlock(text, thresholds)
+        : isValidListBlock(text, {
+            minUnits: thresholds.bodyMinUnits,
+            minPoints: thresholds.minPoints,
+            minUnitDensity: thresholds.bodyMinUnitDensity,
+          });
+      if (!valid) continue;
+      // Same list can appear twice on a page (nested <pre><code>, or quoted in
+      // the article body) — keep the first copy only.
+      const hash = blockHash(text);
+      if (seenBlockHashes.has(hash)) continue;
+      seenBlockHashes.add(hash);
       // SERP surfaces multi-faction roundup articles; keep only blocks that
       // actually mention the requested faction.
-      if (serpCfg.requireFactionMatch && !matchesFaction(block)) continue;
+      if (serpCfg.requireFactionMatch && !matchesFaction(text)) continue;
+      kept[kind]++;
       results.push({
         playerName: null,
         event,
         date,
         record: null,
-        detachment: extractDetachment(block),
-        armyListText: block.slice(0, 10000),
+        detachment: extractDetachment(text),
+        armyListText: text.slice(0, 10000),
         source: 'serp',
         sourceUrl: candidate.link,
         edition: detectedEdition,
         firstSeen: now().toISOString(),
       });
       if (results.length >= maxLists) break;
+    }
+    if (kept.pre + kept.body > 0) {
+      console.log(`[serp] ${candidate.link}: kept ${kept.pre} pre/code + ${kept.body} body block(s)`);
     }
   }
 

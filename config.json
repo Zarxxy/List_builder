@@ -4,6 +4,12 @@
     "maxListsPerSource": 50,
     "serpCacheTTLDays": 7,
     "editionCutoffDate": "2025-08-01",
+    "validation": {
+      "minUnits": 5,
+      "minPoints": 500,
+      "bodyMinUnits": 8,
+      "bodyMinUnitDensity": 0.3
+    },
     "serp": {
       "maxQueries": 4,
       "resultsPerQuery": 10,
